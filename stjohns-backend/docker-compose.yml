@@ -1,0 +1,14 @@
+# Local CockroachDB for development and integration tests (insecure, localhost only).
+# docker compose up -d   →   SQL on localhost:26257, DB console on http://localhost:8089
+services:
+  cockroach:
+    image: cockroachdb/cockroach:v25.3.2
+    command: start-single-node --insecure --cache=256MiB --max-sql-memory=256MiB
+    ports:
+      - "127.0.0.1:26257:26257"
+      - "127.0.0.1:8089:8080"
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+
+volumes:
+  cockroach-data:

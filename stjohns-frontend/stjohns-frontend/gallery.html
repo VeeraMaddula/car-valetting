@@ -1,23 +1,219 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gallery | St Johns Park Car Valeting</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="gallery.css"></head><body class="galleryPage">
-<header><a class="brand" href="index.html">ST JOHNS <span>PARK</span></a><nav><a href="index.html#services">Services</a><a href="index.html#results">Results</a><a class="activeNav" href="gallery.html">Gallery</a><a href="index.html#about">About</a><a href="index.html#contact">Contact</a></nav><a class="navbtn galleryBook" href="index.html">Book a Valet</a></header>
-<main>
-<section class="galleryHero"><div><div class="kicker">OUR WORK</div><h1>Clean cars.<br><em>Real transformations.</em></h1><p>A visual record of the finish, detail and care behind every valet. These launch images are placeholders until St Johns Park's own customer work is uploaded.</p></div></section>
-<section class="gallerySection">
-<div class="galleryTop"><div><div class="kicker">DETAILING GALLERY</div><h2>See the finish up close.</h2></div><div class="galleryFilters" aria-label="Filter gallery"><button class="active" data-filter="all">All</button><button data-filter="exterior">Exterior</button><button data-filter="interior">Interior</button><button data-filter="wheels">Wheels</button></div></div>
-<div class="galleryGrid" id="galleryGrid">
-<button class="galleryItem tall" data-cat="exterior" data-src="https://static.wixstatic.com/media/81bfa3_805fc18bb19948f09fa636109df6ff16~mv2.png/v1/fill/w_653%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/81bfa3_805fc18bb19948f09fa636109df6ff16~mv2.png"><img loading="lazy" src="https://static.wixstatic.com/media/81bfa3_805fc18bb19948f09fa636109df6ff16~mv2.png/v1/fill/w_653%2Ch_653%2Cal_c%2Cq_90%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/81bfa3_805fc18bb19948f09fa636109df6ff16~mv2.png" alt="Luxury black car covered in detailing foam"><span>Exterior Detail<small>Foam wash</small></span></button>
-<button class="galleryItem" data-cat="interior" data-src="https://i.postimg.cc/26J2x8g5/Gemini-Generated-Image-x51ra7x51ra7x51r.png"><img loading="lazy" src="https://i.postimg.cc/26J2x8g5/Gemini-Generated-Image-x51ra7x51ra7x51r.png" alt="Premium leather car interior being detailed"><span>Interior Care<small>Leather & trim</small></span></button>
-<button class="galleryItem" data-cat="wheels" data-src="https://detailking.re/cdn/shop/files/alien-magic-guard-ceramic-wheel-sealant-by-alien-magic-car-care-3.jpg?v=1730917779"><img loading="lazy" src="https://detailking.re/cdn/shop/files/alien-magic-guard-ceramic-wheel-sealant-by-alien-magic-car-care-3.jpg?v=1730917779" alt="Black alloy wheel and bright brake caliper being detailed"><span>Wheel Finish<small>Alloys & calipers</small></span></button>
-<button class="galleryItem wide" data-cat="exterior" data-src="https://mantola.in/images/cards/ceramic.jpg"><img loading="lazy" src="https://mantola.in/images/cards/ceramic.jpg" alt="Black sports car receiving paint finish care"><span>Paint Finish<small>Gloss & protection</small></span></button>
-<button class="galleryItem" data-cat="exterior" data-src="https://mmstudiodetailing.com/assets/aplicacion-tratamiento-ceramico-mallorca.jpg"><img loading="lazy" src="https://mmstudiodetailing.com/assets/aplicacion-tratamiento-ceramico-mallorca.jpg" alt="Glossy black car paint being carefully treated"><span>Precision Finish<small>Paintwork detail</small></span></button>
-<button class="galleryItem tall" data-cat="interior" data-src="https://media.base44.com/images/public/69d3dca690a6f57fe8bd520d/1049e39d1_generated_image.png"><img loading="lazy" src="https://media.base44.com/images/public/69d3dca690a6f57fe8bd520d/1049e39d1_generated_image.png" alt="Red premium car interior being cleaned"><span>Cabin Reset<small>Interior detailing</small></span></button>
-<button class="galleryItem" data-cat="wheels" data-src="https://getundrdog.com/cdn/shop/articles/regular-detailing-matters.jpg?v=1717520407&width=2048"><img loading="lazy" src="https://getundrdog.com/cdn/shop/articles/regular-detailing-matters.jpg?v=1717520407&width=2048" alt="Performance wheel and red brake caliper being deep cleaned"><span>Deep Wheel Clean<small>Detail brush work</small></span></button>
-<button class="galleryItem wide" data-cat="exterior" data-src="assets/hero.png"><img loading="lazy" src="assets/hero.png" alt="Black performance car in a premium detailing studio"><span>Showroom Finish<small>St Johns Park concept</small></span></button>
+<!doctype html>
+<html lang="en" data-ga-id="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Gallery · St Johns Park Car Valeting · Waterford</title>
+<meta name="description" content="See the finish behind every St Johns Park valet — exterior, detail and wheel work up close. Premium hand car valeting in Waterford.">
+<meta name="theme-color" content="#0B0A08">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/gallery-page.css">
+<script type="module" src="js/gallery.js"></script>
+<script src="analytics.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="container">
+    <div class="topbar-group">
+      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Waterford · X91 H79Y</span>
+      <span class="topbar-extra"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Mon–Fri 9:00–17:30 · Sat 10:00–17:00</span>
+    </div>
+    <a href="tel:+353894709672"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>089 470 9672</a>
+  </div>
 </div>
-<div class="galleryNote"><span>COMING NEXT</span><p>As real customer jobs are photographed, these launch placeholders can be replaced with St Johns Park Car Valeting's own before/after sets and completed-work photos.</p></div>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="index.html" aria-label="St Johns Park Car Valeting — home"><span class="brand-name">ST JOHNS PARK</span><span class="brand-sub">CAR VALETING SERVICE</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="index.html#services">Services</a><a href="index.html#process">Process</a><a href="index.html#results">Results</a><a href="gallery.html" aria-current="page">Gallery</a><a href="index.html#about">About</a><a href="index.html#visit">Contact</a>
+    </nav>
+    <div class="header-actions">
+      <a class="account-link" href="account.html" data-account-link><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span data-account-label>Sign in</span></a>
+      <a class="btn btn-gold btn-sm" href="booking.html">Book a valet</a>
+      <button class="icon-btn nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile" hidden>
+    <div class="container">
+      <a href="index.html#services">Services</a><a href="index.html#results">Results</a><a href="gallery.html" aria-current="page">Gallery</a><a href="index.html#about">About</a><a href="index.html#visit">Contact</a><a href="track.html">Track a booking</a><a href="account.html" data-account-link><span data-account-label>Sign in</span></a>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+<section class="page-band g-band">
+  <img class="page-band-image" src="assets/img/slide-rs6-1280.webp" srcset="assets/img/slide-rs6-1280.webp 1280w, assets/img/slide-rs6-2400.webp 2400w" sizes="100vw" alt="" fetchpriority="high">
+  <div class="page-band-shade" aria-hidden="true"></div>
+  <div class="container">
+    <p class="eyebrow">Our work</p>
+    <h1 class="display h2 g-title">Clean cars. <em>Real transformations.</em></h1>
+    <p class="lead g-lead">Paintwork, wheels and the finishing details that make a car feel new again — a closer look at the care behind every valet.</p>
+  </div>
 </section>
-<section class="galleryCta"><div><span>LIKE WHAT YOU SEE?</span><h2>Give your car the same treatment.</h2></div><a href="index.html">Book your valet →</a></section>
+
+<section class="g-section" aria-labelledby="gallery-heading">
+  <div class="container">
+    <h2 class="sr-only" id="gallery-heading">Photo gallery</h2>
+    <div class="g-toolbar">
+      <div class="g-filters" role="group" aria-label="Filter photos by category">
+        <button class="g-chip" type="button" data-filter="all" aria-pressed="true">All<span class="count" data-count>15</span></button>
+        <button class="g-chip" type="button" data-filter="exterior" data-label="exterior" aria-pressed="false">Exterior<span class="count" data-count>7</span></button>
+        <button class="g-chip" type="button" data-filter="detail" data-label="detail" aria-pressed="false">Detail<span class="count" data-count>4</span></button>
+        <button class="g-chip" type="button" data-filter="wheels" data-label="wheel" aria-pressed="false">Wheels<span class="count" data-count>4</span></button>
+      </div>
+      <p class="label g-status" data-status aria-live="polite">Showing all 15 photos</p>
+    </div>
+
+    <ul class="g-grid" data-grid>
+      <li class="g-item g-tall" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-studio-2400.webp"><img class="pos-studio" src="assets/img/slide-studio-1280.webp" srcset="assets/img/slide-studio-1280.webp 1280w, assets/img/slide-studio-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), (max-width: 1023px) calc(50vw - 40px), 960px" width="1280" height="720" alt="Black saloon covered in snow foam inside a bright detailing studio" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Snow foam pre-wash</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="wheels">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-studio-2400.webp"><img class="crop crop-studio-wheel" src="assets/img/slide-studio-1280.webp" srcset="assets/img/slide-studio-1280.webp 1280w, assets/img/slide-studio-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of a black multi-spoke alloy wheel and red brake caliper dripping with snow foam" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Alloy &amp; caliper clean</span><span class="label">Wheels</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="detail">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-studio-2400.webp"><img class="crop crop-studio-light" src="assets/img/slide-studio-1280.webp" srcset="assets/img/slide-studio-1280.webp 1280w, assets/img/slide-studio-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of an LED headlight and gloss black bonnet beaded with foam" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Headlight &amp; paint gloss</span><span class="label">Detail</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item g-wide" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-taycan-2400.webp"><img src="assets/img/slide-taycan-1280.webp" srcset="assets/img/slide-taycan-1280.webp 1280w, assets/img/slide-taycan-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), 800px" width="1280" height="720" alt="Valeter hand washing a black Porsche Taycan with a foam mitt, two wash buckets at his feet" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Two-bucket hand wash</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="detail">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-taycan-2400.webp"><img class="crop crop-taycan-mitt" src="assets/img/slide-taycan-1280.webp" srcset="assets/img/slide-taycan-1280.webp 1280w, assets/img/slide-taycan-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of a wash mitt gliding over the foam-covered bonnet of a black Porsche Taycan" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Safe contact wash</span><span class="label">Detail</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-amg-2400.webp"><img src="assets/img/slide-amg-1280.webp" srcset="assets/img/slide-amg-1280.webp 1280w, assets/img/slide-amg-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), (max-width: 1023px) calc(50vw - 40px), 400px" width="1280" height="720" alt="Matte grey Mercedes-AMG GT R with yellow accents parked on open tarmac" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Matte paint care</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="wheels">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-amg-2400.webp"><img class="crop crop-amg-wheel" src="assets/img/slide-amg-1280.webp" srcset="assets/img/slide-amg-1280.webp 1280w, assets/img/slide-amg-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of a gloss black alloy wheel and yellow brake caliper on a matte grey Mercedes-AMG" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Gloss black alloys</span><span class="label">Wheels</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="detail">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-m4-2400.webp"><img class="crop crop-m4-light" src="assets/img/slide-m4-1280.webp" srcset="assets/img/slide-m4-1280.webp 1280w, assets/img/slide-m4-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of glowing angel-eye headlights on a grey BMW M4 at dusk" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Clear headlight lenses</span><span class="label">Detail</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item g-tall" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-rs6-2400.webp"><img src="assets/img/slide-rs6-1280.webp" srcset="assets/img/slide-rs6-1280.webp 1280w, assets/img/slide-rs6-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), (max-width: 1023px) calc(50vw - 40px), 960px" width="1280" height="720" alt="Black Audi RS 6 Avant front view at dusk" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Deep gloss black</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="wheels">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-m4-2400.webp"><img class="crop crop-m4-wheel" src="assets/img/slide-m4-1280.webp" srcset="assets/img/slide-m4-1280.webp 1280w, assets/img/slide-m4-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of a dark multi-spoke alloy wheel and yellow brake caliper on a grey BMW M4" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Spoke-by-spoke detail</span><span class="label">Wheels</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="detail">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-huracan-2400.webp"><img class="crop crop-huracan-light" src="assets/img/slide-huracan-1280.webp" srcset="assets/img/slide-huracan-1280.webp 1280w, assets/img/slide-huracan-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Close-up of a white Lamborghini Huracán headlight and bonnet edge" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Panel &amp; lens finish</span><span class="label">Detail</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item" data-category="wheels">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-taycan-2400.webp"><img class="crop crop-taycan-wheel" src="assets/img/slide-taycan-1280.webp" srcset="assets/img/slide-taycan-1280.webp 1280w, assets/img/slide-taycan-2400.webp 2400w" sizes="(max-width: 639px) 160vw, (max-width: 1023px) 90vw, 800px" width="1280" height="720" alt="Foam running off the front alloy wheel and arch of a black Porsche Taycan" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Wheels &amp; arches</span><span class="label">Wheels</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item g-wide" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-panamera-2400.webp"><img src="assets/img/slide-panamera-1280.webp" srcset="assets/img/slide-panamera-1280.webp 1280w, assets/img/slide-panamera-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), 800px" width="1280" height="720" alt="Black Porsche Panamera Turbo on the motorway at dusk" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Ready for the road</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item g-tall" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-m4-2400.webp"><img class="pos-front" src="assets/img/slide-m4-1280.webp" srcset="assets/img/slide-m4-1280.webp 1280w, assets/img/slide-m4-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), (max-width: 1023px) calc(50vw - 40px), 960px" width="1280" height="720" alt="Grey BMW M4 coupé with angel-eye headlights on a country road at dusk" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Satin grey finish</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+      <li class="g-item g-wide" data-category="exterior">
+        <figure class="g-tile">
+          <a class="g-link" href="assets/img/slide-huracan-2400.webp"><img class="pos-left" src="assets/img/slide-huracan-1280.webp" srcset="assets/img/slide-huracan-1280.webp 1280w, assets/img/slide-huracan-2400.webp 2400w" sizes="(max-width: 639px) calc(100vw - 40px), 800px" width="1280" height="720" alt="White Lamborghini Huracán parked on a mountain road" loading="lazy" decoding="async"></a>
+          <figcaption class="g-cap"><span class="g-cap-title">Bright white paintwork</span><span class="label">Exterior</span></figcaption>
+        </figure>
+      </li>
+    </ul>
+
+    <p class="small g-note">Photos show the kind of finish we work to. We're adding St Johns Park's own customer before-and-after sets as jobs are photographed.</p>
+  </div>
+</section>
+
+<section class="g-cta" aria-labelledby="cta-title">
+  <div class="container">
+    <p class="eyebrow no-rule">Like what you see?</p>
+    <h2 class="display g-cta-title" id="cta-title">Give your car <em>the same treatment.</em></h2>
+    <div class="rule-glint" aria-hidden="true"></div>
+    <div class="g-cta-actions">
+      <a class="btn btn-gold btn-lg" href="booking.html">Book your valet<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn btn-ghost btn-lg" href="tel:+353894709672">Call 089 470 9672</a>
+    </div>
+  </div>
+</section>
+
 </main>
-<footer><b>ST JOHNS PARK</b><span>Professional car valeting • Waterford</span><small>© 2026 St Johns Park Car Valeting Service</small></footer>
-<div class="lightbox" id="lightbox" aria-hidden="true"><button class="lightboxClose" type="button" aria-label="Close image">×</button><img id="lightboxImg" alt=""></div>
-<script src="gallery.js"></script></body></html>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <img class="footer-logo" src="assets/img/logo-600.webp" alt="St Johns Park Car Valeting Service" loading="lazy" width="600" height="400">
+      <div class="footer-col"><p class="label">Explore</p><a href="index.html#services">Services</a><a href="gallery.html" aria-current="page">Gallery</a><a href="track.html">Track a booking</a><a href="my-bookings.html">My account</a></div>
+      <div class="footer-col"><p class="label">Hours</p><span>Mon–Fri 9:00–17:30</span><span>Saturday 10:00–17:00</span><span>Sunday closed</span></div>
+      <div class="footer-col"><p class="label">Contact</p><a href="tel:+353894709672">089 470 9672</a><a href="mailto:Stjohnsparkcarvaleting@gmail.com">Email us</a><span>Waterford, X91 H79Y</span></div>
+    </div>
+    <div class="footer-base"><span>© <span data-year>2026</span> St Johns Park Car Valeting Service</span><span><a href="#" data-cookie-settings>Cookie settings</a></span></div>
+  </div>
+</footer>
+
+<dialog class="lightbox" id="lightbox" aria-label="Photo viewer" data-lightbox>
+  <div class="lb-stage" data-lb-dismiss>
+    <div class="lb-top" data-lb-dismiss>
+      <p class="lb-count num" data-lb-count aria-hidden="true"></p>
+      <button class="icon-btn lb-close" type="button" data-lb-close aria-label="Close photo viewer" autofocus><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="lb-body" data-lb-dismiss>
+      <figure class="lb-figure">
+        <div class="lb-frame" data-lb-frame>
+          <img class="lb-img" alt="" data-lb-img>
+          <span class="spinner spinner-light lb-spinner" aria-hidden="true"></span>
+        </div>
+        <figcaption class="lb-caption" aria-live="polite"><span class="lb-title" data-lb-title></span><span class="label lb-cat" data-lb-cat></span><span class="sr-only" data-lb-position></span></figcaption>
+      </figure>
+    </div>
+    <button class="lb-nav lb-prev" type="button" data-lb-prev aria-label="Previous photo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="lb-nav lb-next" type="button" data-lb-next aria-label="Next photo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+  </div>
+</dialog>
+</body>
+</html>

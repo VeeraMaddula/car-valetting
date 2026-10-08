@@ -1,0 +1,106 @@
+/* Gallery page (gallery.html). Shared tokens and components come from css/site.css. */
+
+/* ---------- Heading band ---------- */
+.g-band .page-band-image { object-position: 50% 45%; }
+.g-band .container { padding-top: 104px; padding-bottom: 88px; gap: 22px; }
+.g-title { max-width: 760px; }
+.g-lead { max-width: 560px; }
+
+/* ---------- Toolbar: filter chips + result count ---------- */
+.g-section { padding: 72px 0 120px; }
+.g-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 20px 32px; flex-wrap: wrap; margin-bottom: 40px; }
+.g-filters { display: flex; gap: 10px; flex-wrap: wrap; }
+.g-chip { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px; border: 1px solid var(--hair-strong); background: transparent; color: var(--body); font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; transition: background .2s ease, border-color .2s ease, color .2s ease; }
+.g-chip:hover { border-color: var(--gold-hi); color: var(--ivory); }
+.g-chip[aria-pressed='true'] { background: var(--gold); border-color: var(--gold); color: var(--ink); font-weight: 600; }
+.g-chip[aria-pressed='true'] .count { background: rgba(11, 10, 8, .16); color: var(--ink); }
+.g-status { color: var(--muted); }
+
+/* ---------- Grid ---------- */
+.g-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 240px; grid-auto-flow: dense; gap: 16px; }
+.g-item.is-entering { animation: g-in .45s var(--ease) both; }
+@keyframes g-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (min-width: 640px) {
+  .g-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 250px; }
+  .g-wide { grid-column: span 2; }
+}
+@media (min-width: 1024px) {
+  .g-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 260px; }
+  .g-tall { grid-row: span 2; }
+}
+
+/* ---------- Tiles (same look as the homepage .tile) ---------- */
+.g-tile { position: relative; height: 100%; margin: 0; overflow: hidden; border: 1px solid rgba(201, 162, 74, .18); background: var(--surface); }
+.g-link { position: absolute; inset: 0; display: block; cursor: zoom-in; }
+.g-link::after { content: ''; position: absolute; inset: 0; z-index: 2; pointer-events: none; transition: box-shadow .2s ease; }
+.g-link:focus-visible { outline: none; }
+.g-link:focus-visible::after { box-shadow: inset 0 0 0 2px var(--gold-hi); }
+.g-tile img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; transition: transform .8s var(--ease); }
+.g-tile:hover img, .g-link:focus-visible img { transform: scale(1.06); }
+.g-cap { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 48px 22px 18px; background: linear-gradient(0deg, rgba(11, 10, 8, .9), rgba(11, 10, 8, 0)); display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; font-family: var(--font-display); font-size: 24px; line-height: 1.15; pointer-events: none; }
+.g-cap .label { flex: 0 0 auto; font-family: var(--font-body); color: var(--gold); font-size: 11px; line-height: 1.6; }
+
+/* Framing for full shots */
+.g-tile img.pos-studio { object-position: 65% 50%; }
+.g-tile img.pos-front { object-position: 72% 50%; }
+.g-tile img.pos-left { object-position: 38% 50%; }
+
+/* Detail crops of the full photos (used by tiles and the lightbox). object-position and transform-origin
+   share one point, so the zoom stays on the detail in any tile shape and in the 16:9 lightbox frame. */
+.g-tile img.crop, .lb-img.crop { object-position: var(--crop-x) var(--crop-y); transform-origin: var(--crop-x) var(--crop-y); scale: var(--crop-scale); }
+.crop-studio-wheel { --crop-x: 68%; --crop-y: 80%; --crop-scale: 1.8; }
+.crop-studio-light { --crop-x: 86%; --crop-y: 36%; --crop-scale: 2.4; }
+.crop-taycan-mitt { --crop-x: 31%; --crop-y: 76%; --crop-scale: 2; }
+.crop-taycan-wheel { --crop-x: 65%; --crop-y: 100%; --crop-scale: 2.2; }
+.crop-amg-wheel { --crop-x: 51%; --crop-y: 96%; --crop-scale: 2.2; }
+.crop-m4-light { --crop-x: 63%; --crop-y: 58%; --crop-scale: 2.4; }
+.crop-m4-wheel { --crop-x: 33%; --crop-y: 89%; --crop-scale: 2; }
+.crop-huracan-light { --crop-x: 36%; --crop-y: 82%; --crop-scale: 2.4; }
+
+.g-note { margin-top: 32px; max-width: 640px; color: var(--faint); }
+
+/* ---------- Lightbox (native <dialog>) ---------- */
+html.lb-open { overflow: hidden; }
+.lightbox { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: var(--ivory); overflow: hidden; }
+.lightbox::backdrop { background: rgba(5, 4, 3, .97); }
+.lightbox[open] { animation: lb-in .25s var(--ease); }
+@keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+.lb-stage { position: relative; height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 16px clamp(16px, 4vw, 40px) 24px; }
+.lb-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 52px; }
+.lb-count { font-family: var(--font-display); font-size: 22px; letter-spacing: .04em; color: var(--gold); }
+.lb-close { background: rgba(11, 10, 8, .6); }
+.lb-body { display: flex; align-items: center; justify-content: center; min-height: 0; }
+.lb-figure { margin: 0; width: min(1200px, 100%, calc((100vh - 200px) * 16 / 9)); display: flex; flex-direction: column; gap: 18px; }
+@supports (height: 100dvh) {
+  .lb-figure { width: min(1200px, 100%, calc((100dvh - 200px) * 16 / 9)); }
+}
+.lb-frame { position: relative; overflow: hidden; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line-strong); touch-action: pan-y; }
+.lb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s ease; }
+.lb-img.is-ready { opacity: 1; }
+.lb-spinner { position: absolute; left: 50%; top: 50%; margin: -9px 0 0 -9px; opacity: 0; transition: opacity .2s ease; }
+.lb-frame.lb-loading .lb-spinner { opacity: 1; }
+.lb-caption { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.lb-title { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 30px); line-height: 1.15; }
+.lb-cat { color: var(--gold); }
+.lb-nav { position: absolute; top: 50%; z-index: 3; width: 52px; height: 52px; margin-top: -26px; border-radius: 50%; border: 1px solid var(--hair-strong); background: rgba(11, 10, 8, .6); color: var(--ivory); display: inline-flex; align-items: center; justify-content: center; padding: 0; transition: border-color .2s ease, color .2s ease; }
+.lb-nav:hover { border-color: var(--gold-hi); color: var(--gold-hi); }
+.lb-prev { left: clamp(8px, 2vw, 28px); }
+.lb-next { right: clamp(8px, 2vw, 28px); }
+
+/* ---------- CTA band (matches the homepage) ---------- */
+.g-cta { border-top: 1px solid rgba(201, 162, 74, .2); background: radial-gradient(ellipse at 50% 0%, #1F1A10 0%, var(--ink) 65%); }
+.g-cta .container { max-width: 900px; padding-top: 120px; padding-bottom: 120px; display: flex; flex-direction: column; align-items: center; gap: 32px; text-align: center; }
+.g-cta-title { font-size: clamp(44px, 6vw, 80px); line-height: 1; }
+.g-cta-actions { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; padding-top: 8px; }
+
+@media (max-width: 760px) {
+  .g-band .container { padding-top: 64px; padding-bottom: 52px; }
+  .g-band .page-band-image + .page-band-shade { background: linear-gradient(0deg, var(--ink) 0%, rgba(11, 10, 8, .82) 60%, rgba(11, 10, 8, .6) 100%); }
+  .g-section { padding: 48px 0 88px; }
+  .g-toolbar { margin-bottom: 28px; }
+  .g-chip { padding: 0 14px; letter-spacing: .16em; }
+  .g-cap { font-size: 21px; padding: 40px 18px 16px; }
+  .g-cta .container { padding-top: 88px; padding-bottom: 88px; }
+  .lb-stage { padding: 12px 12px 84px; }
+  .lb-nav { top: auto; bottom: 20px; margin-top: 0; width: 48px; height: 48px; }
+}

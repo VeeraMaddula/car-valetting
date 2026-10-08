@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" data-ga-id="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>My bookings · St Johns Park Car Valeting</title>
+<meta name="description" content="See and manage your St Johns Park valets: upcoming and past bookings, calendar links and cancellations.">
+<meta name="theme-color" content="#0B0A08">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/account.css">
+<script type="module" src="js/my-bookings.js"></script>
+<script src="analytics.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="container">
+    <div class="topbar-group">
+      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Waterford · X91 H79Y</span>
+      <span class="topbar-extra"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Mon–Fri 9:00–17:30 · Sat 10:00–17:00</span>
+    </div>
+    <a href="tel:+353894709672"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>089 470 9672</a>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="index.html" aria-label="St Johns Park Car Valeting — home"><span class="brand-name">ST JOHNS PARK</span><span class="brand-sub">CAR VALETING SERVICE</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="index.html#services">Services</a><a href="index.html#process">Process</a><a href="index.html#results">Results</a><a href="gallery.html">Gallery</a><a href="index.html#about">About</a><a href="track.html">Track</a>
+    </nav>
+    <div class="header-actions">
+      <div class="user-chip" data-user-chip hidden>
+        <span class="avatar" aria-hidden="true" data-initials></span>
+        <span class="user-name" data-user="fullName"></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-sign-out>Sign out</button>
+      </div>
+      <button class="icon-btn nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile" hidden>
+    <div class="container">
+      <a href="index.html">Home</a><a href="index.html#services">Services</a><a href="gallery.html">Gallery</a><a href="index.html#visit">Contact</a><a href="track.html">Track a booking</a><a href="booking.html">Book a valet</a><a href="my-bookings.html" aria-current="page">My bookings</a>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="container mb-loading" role="status" data-loading><span class="spinner spinner-light" aria-hidden="true"></span>Loading your account…</div>
+
+<div data-signed-in hidden>
+
+  <section class="page-band band-row mb-band" aria-labelledby="page-title">
+    <div class="container">
+      <div class="band-copy">
+        <p class="eyebrow">My account</p>
+        <h1 class="display" id="page-title"><span data-greeting>Hello</span>, <em data-first-name></em></h1>
+        <p class="lead band-lead" data-summary>Loading your bookings…</p>
+      </div>
+      <a class="btn btn-gold btn-lg" href="booking.html">Book a valet<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </div>
+  </section>
+
+  <div class="container page-body split">
+
+    <div class="mb-main">
+
+      <section class="next-card" aria-labelledby="next-title" data-next hidden>
+        <div class="date-tile" aria-hidden="true"><span class="dt-dow" data-next-dow></span><span class="dt-day" data-next-day></span><span class="dt-mon" data-next-mon></span></div>
+        <div class="next-info">
+          <p class="next-kicker">Your next valet · <span data-next-countdown></span></p>
+          <h2 class="next-service" id="next-title" data-next-service></h2>
+          <p class="next-meta" data-next-meta></p>
+          <span class="pill" data-next-status></span>
+        </div>
+        <div class="next-actions">
+          <a class="btn btn-gold btn-sm" href="#" data-next-calendar><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Add to calendar</a>
+          <button class="btn btn-ghost btn-sm" type="button" data-next-open>View details</button>
+        </div>
+      </section>
+
+      <section class="bookings" aria-labelledby="bookings-title">
+        <h2 class="sr-only" id="bookings-title">Your bookings</h2>
+        <div class="tabs" role="tablist" aria-label="Booking lists">
+          <button class="tab" type="button" role="tab" id="tab-upcoming" aria-controls="bookings-panel" aria-selected="true" data-tab="upcoming">Upcoming<span class="count" data-count="upcoming">0</span></button>
+          <button class="tab" type="button" role="tab" id="tab-past" aria-controls="bookings-panel" aria-selected="false" tabindex="-1" data-tab="past">Past<span class="count" data-count="past">0</span></button>
+          <button class="tab" type="button" role="tab" id="tab-cancelled" aria-controls="bookings-panel" aria-selected="false" tabindex="-1" data-tab="cancelled">Cancelled<span class="count" data-count="cancelled">0</span></button>
+        </div>
+        <div class="bookings" id="bookings-panel" role="tabpanel" aria-labelledby="tab-upcoming">
+          <div class="mb-loading" data-list-loading><span class="spinner spinner-light" aria-hidden="true"></span>Loading your bookings…</div>
+          <div class="notice notice-error list-error" role="alert" data-list-error hidden><span data-list-error-text></span><button class="btn btn-ghost btn-sm" type="button" data-retry>Try again</button></div>
+          <p class="list-empty" data-list-empty hidden></p>
+          <ul class="booking-list" data-list></ul>
+        </div>
+      </section>
+
+    </div>
+
+    <aside class="split-aside mb-aside" aria-label="Your account">
+
+      <section class="card aside-card aside-card-gold" aria-labelledby="claim-title">
+        <h2 class="panel-title" id="claim-title">Booked as a guest?</h2>
+        <p class="panel-copy">Add an earlier booking to your account with its tracking ID and the phone number you used.</p>
+        <form class="claim-form" novalidate data-claim>
+          <div class="field">
+            <label for="claim-ref">Tracking ID</label>
+            <input id="claim-ref" name="reference" type="text" placeholder="SJP-XXXX-XXXX" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="40" aria-describedby="claim-msg">
+          </div>
+          <div class="field">
+            <label for="claim-phone">Phone used to book</label>
+            <input id="claim-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" aria-describedby="claim-msg">
+          </div>
+          <button class="btn btn-ghost btn-sm" type="submit">Add to my account</button>
+          <p class="claim-msg" id="claim-msg" role="status" data-claim-msg></p>
+        </form>
+      </section>
+
+      <section class="card aside-card" aria-labelledby="details-title">
+        <h2 class="panel-title" id="details-title">Your details</h2>
+        <dl class="facts details-list">
+          <div><dt>Name</dt><dd data-user="fullName"></dd></div>
+          <div><dt>Username</dt><dd data-user="username"></dd></div>
+          <div><dt>Email</dt><dd data-user="email"></dd></div>
+          <div><dt>Mobile</dt><dd data-user="phone"></dd></div>
+        </dl>
+        <a class="link-arrow" href="account.html?mode=forgot">Change password</a>
+      </section>
+
+      <section class="aside-card-plain" aria-labelledby="reach-title">
+        <h2 class="panel-title" id="reach-title">How we'll reach you</h2>
+        <ul class="reach-list">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg><span>Texts to <span data-user="phone"></span></span></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 7l9 6 9-6"/></svg><span>Emails to <span data-user="email"></span></span></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span>Reminder at 6pm the evening before</span></li>
+        </ul>
+      </section>
+
+    </aside>
+  </div>
+</div>
+
+<div class="container signed-out" data-signed-out hidden>
+  <h1 class="display" tabindex="-1">You've signed out.</h1>
+  <p>Your bookings are safe. Sign in again any time, or track a booking with its tracking ID.</p>
+  <div class="signed-out-actions">
+    <a class="btn btn-gold" href="account.html?next=my-bookings.html">Sign in</a>
+    <a class="btn btn-ghost" href="index.html">Home</a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site-footer footer-slim">
+  <div class="container">
+    <span>© <span data-year>2026</span> St Johns Park Car Valeting Service</span>
+    <span><a href="tel:+353894709672">089 470 9672</a> · Waterford X91 H79Y · <a href="#" data-cookie-settings>Cookie settings</a></span>
+  </div>
+</footer>
+</body>
+</html>
