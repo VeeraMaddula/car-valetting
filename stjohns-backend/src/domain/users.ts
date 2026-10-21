@@ -14,7 +14,8 @@ export interface SessionUser {
   email: string;
   fullName: string;
   phone: string;
-  role: 'customer' | 'admin';
+  /** 'staff' manages bookings only; 'admin' has full access. */
+  role: 'customer' | 'staff' | 'admin';
 }
 
 export function publicUser(u: SessionUser) {
@@ -48,6 +49,8 @@ export const registerSchema = z
     password,
     fullName: trimmed(2, 100, 'Name'),
     phone: trimmed(6, 30, 'Phone number'),
+    /** From a team invite link: the new account gets the invited access. */
+    inviteToken: z.string().min(20, 'Invite link is invalid').max(100, 'Invite link is invalid').optional(),
   })
   .refine((v) => v.password.toLowerCase() !== v.username, { path: ['password'], message: 'Password must not be your username' });
 
@@ -71,13 +74,31 @@ export async function register(deps: Deps, raw: unknown): Promise<SessionUser> {
   if (!phone) throw new AppError('VALIDATION_FAILED', 'Please check the highlighted fields.', { phone: 'Enter a valid phone number' });
   const passwordHash = await hashPassword(input.password);
   try {
-    const { rows } = await deps.db.query(
-      `INSERT INTO users (username, email, full_name, phone, password_hash)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, username, email, full_name, phone, role`,
-      [input.username, input.email, input.fullName, phone.e164, passwordHash],
-    );
-    return mapUser(rows[0]);
+    return await withTx(deps.db, async (c) => {
+      let role: SessionUser['role'] = 'customer';
+      let inviteId: string | null = null;
+      if (input.inviteToken) {
+        const { rows } = await c.query<{ id: string; email: string; role: 'staff' | 'admin' }>(
+          'SELECT id, email, role FROM team_invites WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() FOR UPDATE',
+          [sha256(input.inviteToken)],
+        );
+        const invite = rows[0];
+        if (!invite) throw new AppError('VALIDATION_FAILED', 'This invite link is invalid or has expired. Ask for a new one.', { inviteToken: 'Expired' });
+        if (invite.email !== input.email) {
+          throw new AppError('VALIDATION_FAILED', 'Use the email address the invite was sent to.', { email: 'Use the invited email address' });
+        }
+        role = invite.role;
+        inviteId = invite.id;
+      }
+      const { rows } = await c.query(
+        `INSERT INTO users (username, email, full_name, phone, password_hash, role)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, username, email, full_name, phone, role`,
+        [input.username, input.email, input.fullName, phone.e164, passwordHash, role],
+      );
+      if (inviteId) await c.query('UPDATE team_invites SET accepted_at = now() WHERE id = $1', [inviteId]);
+      return mapUser(rows[0]);
+    });
   } catch (err) {
     if (isUniqueViolation(err, 'users_username_key')) {
       throw new AppError('CONFLICT', 'That username is taken.', { username: 'That username is taken' });
@@ -130,18 +151,22 @@ export async function sessionUser(db: Queryable, token: string): Promise<Session
   const cached = sessionCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.user;
   const { rows } = await db.query(
-    `SELECT u.id, u.username, u.email, u.full_name, u.phone, u.role
+    `SELECT u.id, u.username, u.email, u.full_name, u.phone, u.role, s.expires_at
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [key],
   );
-  if (!rows[0]) {
+  const row = rows[0];
+  const expiresAt = row ? new Date(row.expires_at).getTime() : NaN;
+  // The session can expire while the query is in flight, so check its expiry here too.
+  if (!row || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
     sessionCache.delete(key);
     return null;
   }
-  const user = mapUser(rows[0]);
+  const user = mapUser(row);
   if (sessionCache.size >= CACHE_MAX) sessionCache.clear();
-  sessionCache.set(key, { user, expires: Date.now() + CACHE_MS });
+  // Never keep a session in the cache past its own expiry.
+  sessionCache.set(key, { user, expires: Math.min(Date.now() + CACHE_MS, expiresAt) });
   return user;
 }
 
@@ -151,7 +176,8 @@ export async function destroySession(db: Queryable, token: string): Promise<void
   await db.query('DELETE FROM sessions WHERE token_hash = $1', [key]);
 }
 
-function forgetUserSessions(userId: string) {
+/** Drop cached sessions for a user (after a role change or erasure) so the change applies on their next request. */
+export function forgetUserSessions(userId: string) {
   for (const [key, entry] of sessionCache) if (entry.user.id === userId) sessionCache.delete(key);
 }
 
@@ -168,14 +194,19 @@ export async function requestPasswordReset(deps: Deps, raw: unknown): Promise<vo
   const input = parse(forgotSchema, raw);
   const { rows } = await deps.db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [input.email]);
   if (!rows[0]) return;
+  await issuePasswordReset(deps, rows[0].id);
+}
+
+/** Email a one-hour reset link (also used by the owner's "Send password reset link"). */
+export async function issuePasswordReset(deps: Deps, userId: string): Promise<void> {
   const token = randomToken(32);
   await withTx(deps.db, async (c) => {
     await c.query('INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1, $2, $3)', [
       sha256(token),
-      rows[0].id,
+      userId,
       new Date(Date.now() + 60 * 60_000),
     ]);
-    await enqueue(c, [{ kind: 'auth.password_reset', payload: { userId: rows[0].id, token } }]);
+    await enqueue(c, [{ kind: 'auth.password_reset', payload: { userId, token } }]);
   });
   deps.wakeWorker();
 }

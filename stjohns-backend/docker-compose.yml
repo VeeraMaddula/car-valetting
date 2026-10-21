@@ -1,14 +1,17 @@
-# Local CockroachDB for development and integration tests (insecure, localhost only).
-# docker compose up -d   →   SQL on localhost:26257, DB console on http://localhost:8089
+# Optional local PostgreSQL 18 for development (the same engine as Neon in production; localhost only).
+# docker compose up -d   →   postgresql://postgres:postgres@localhost:5432/stjohns?sslmode=disable
+# A Neon dev branch works just as well and needs no Docker (see README › Local development).
 services:
-  cockroach:
-    image: cockroachdb/cockroach:v25.3.2
-    command: start-single-node --insecure --cache=256MiB --max-sql-memory=256MiB
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stjohns
     ports:
-      - "127.0.0.1:26257:26257"
-      - "127.0.0.1:8089:8080"
+      - "127.0.0.1:5432:5432"
     volumes:
-      - cockroach-data:/cockroach/cockroach-data
+      - postgres-data:/var/lib/postgresql
 
 volumes:
-  cockroach-data:
+  postgres-data:

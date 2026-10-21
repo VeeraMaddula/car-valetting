@@ -1,6 +1,7 @@
 import type { Config } from '../config.js';
 import type { BookingRecord } from '../domain/bookings.js';
 import { calendarUrl, depositPayUrl, timeLabel, trackUrl, whenLabel } from '../domain/bookings.js';
+import { euros, SIZE_LABELS } from '../domain/pricing.js';
 import type { NotifyTemplate } from '../jobs/queue.js';
 import { displayPhone } from '../lib/phone.js';
 import { formatReference } from '../lib/reference.js';
@@ -90,18 +91,29 @@ ${esc(config.BUSINESS_NAME)}<br>${esc(config.BUSINESS_ADDRESS)}<br>${esc(config.
   return { html, text };
 }
 
+/** 'From €76.50 (includes SPRING15: −€13.50)'. */
+export function priceLine(b: BookingRecord): string | null {
+  if (b.totalCents === null) return null;
+  const discount = b.discountCode ? ` (includes ${b.discountCode}: −${euros(b.discountCents)})` : '';
+  return `${b.servicePriceFrom ? 'From ' : ''}${euros(b.totalCents)}${discount}`;
+}
+
 function bookingRows(b: BookingRecord, config: Config): [string, string][] {
-  return [
+  const rows: [string, string][] = [
     ['Reference', formatReference(b.reference)],
     ['Service', b.serviceName],
     ['Date', longDate(b.slotDate)],
     ['Slot', `${b.periodLabel} · ${timeLabel(b)}`],
-    ['Vehicle', b.vehicle],
+    ['Vehicle', b.vehicleSize ? `${b.vehicle} (${SIZE_LABELS[b.vehicleSize]})` : b.vehicle],
     ['Handover', b.handover === 'collection' ? `Collection from ${b.collectionAddress ?? ''}` : `Drop off at ${config.BUSINESS_ADDRESS}`],
   ];
+  if (b.addons.length) rows.push(['Extras', b.addons.map((a) => `${a.name} (+${euros(a.priceCents)})`).join(', ')]);
+  const price = priceLine(b);
+  if (price) rows.push(['Price', price]);
+  return rows;
 }
 
-export function customerEmail(template: NotifyTemplate, b: BookingRecord, config: Config): RenderedEmail | null {
+export function customerEmail(template: NotifyTemplate, b: BookingRecord, config: Config, extra: { reviewUrl?: string | null } = {}): RenderedEmail | null {
   const ref = formatReference(b.reference);
   const track = { label: 'Track booking', url: trackUrl(config, b) };
   const addToCalendar = { label: 'Add to calendar', url: calendarUrl(config, b) };
@@ -254,6 +266,24 @@ export function customerEmail(template: NotifyTemplate, b: BookingRecord, config
           cta: { label: 'Book again', url: config.PUBLIC_SITE_URL },
         }),
       };
+    case 'review_request':
+      if (!extra.reviewUrl) return null;
+      return {
+        subject: `How did we do, ${name}?`,
+        attachCalendar: false,
+        ...layout(config, {
+          preheader: 'A quick Google review helps a small local business more than you might think.',
+          eyebrow: 'Thank you',
+          heading: 'How was your valet?',
+          intro: [
+            `Thanks again for choosing us for your ${b.serviceName}, ${name}.`,
+            'If you were happy with the finish, a short Google review would mean a lot to us. It takes under a minute.',
+          ],
+          rows: [],
+          cta: { label: 'Leave a review', url: extra.reviewUrl },
+          outro: [`Not happy with something? Reply to this email or call ${config.BUSINESS_PHONE} and we'll put it right.`],
+        }),
+      };
   }
 }
 
@@ -276,7 +306,7 @@ export function ownerEmail(template: NotifyTemplate, b: BookingRecord, config: C
         preheader: `${b.serviceName} for ${b.customerName}`,
         eyebrow: 'New booking',
         heading: `${b.serviceName}: ${shortDate(b.slotDate)}, ${b.periodLabel}`,
-        intro: ['A new booking is waiting for your confirmation.'],
+        intro: [b.status === 'confirmed' ? 'A new booking came in and was confirmed automatically.' : 'A new booking is waiting for your confirmation.'],
         rows,
         cta: call,
       }),
@@ -342,6 +372,7 @@ export function customerSms(template: NotifyTemplate, b: BookingRecord, config: 
     case 'deposit_refunded':
       return `St Johns Park: your €${config.DEPOSIT_AMOUNT_EUR} deposit for ${ref} has been refunded. Allow 5–10 working days. Questions? ${config.BUSINESS_PHONE}`;
     case 'completed':
+    case 'review_request':
       return null;
   }
 }
@@ -374,6 +405,75 @@ export function passwordResetEmail(config: Config, fullName: string, link: strin
       rows: [],
       cta: { label: 'Choose a new password', url: link },
       outro: ["If you didn't ask for this, you can ignore this email. Your password won't change."],
+    }),
+  };
+}
+
+export interface SummaryLine {
+  period: string;
+  customer: string;
+  detail: string;
+}
+
+/** 8am email to the owner: today's bookings and anything waiting for them. */
+export function ownerDailySummaryEmail(
+  config: Config,
+  date: string,
+  lines: SummaryLine[],
+  counts: { pending: number; depositsOutstanding: number },
+  adminUrl: string,
+): RenderedEmail {
+  const waiting = [
+    counts.pending ? `${counts.pending} booking${counts.pending === 1 ? '' : 's'} waiting for your confirmation.` : '',
+    counts.depositsOutstanding ? `${counts.depositsOutstanding} deposit${counts.depositsOutstanding === 1 ? '' : 's'} requested but not paid yet.` : '',
+  ].filter(Boolean);
+  return {
+    subject: `Today: ${lines.length ? `${lines.length} booking${lines.length === 1 ? '' : 's'}` : 'no bookings'} (${shortDate(date)})`,
+    attachCalendar: false,
+    ...layout(config, {
+      preheader: lines.map((l) => `${l.period}: ${l.customer}`).join(' · ') || 'No bookings today.',
+      eyebrow: 'Daily summary',
+      heading: longDate(date),
+      intro: [lines.length ? "Here's your day." : 'No bookings today.', ...waiting],
+      rows: lines.map((l) => [l.period, `${l.customer} · ${l.detail}`]),
+      cta: { label: 'Open bookings', url: adminUrl },
+    }),
+  };
+}
+
+const ACCESS_LABELS = { staff: 'bookings', admin: 'full' } as const;
+
+export function teamInviteEmail(config: Config, inviter: string, role: 'staff' | 'admin', link: string, hasAccount: boolean): RenderedEmail {
+  return {
+    subject: `You're invited to manage ${config.BUSINESS_NAME}`,
+    attachCalendar: false,
+    ...layout(config, {
+      preheader: `${inviter} invited you to the booking dashboard with ${ACCESS_LABELS[role]} access.`,
+      eyebrow: 'Team invite',
+      heading: 'Join the booking dashboard',
+      intro: [
+        `${inviter} has invited you to the ${config.BUSINESS_NAME} dashboard with ${ACCESS_LABELS[role]} access.`,
+        hasAccount
+          ? 'Open the link and sign in with your existing account (this email address) to accept. The link works for 7 days.'
+          : 'Open the link and create your login with this email address. The link works for 7 days.',
+      ],
+      rows: [],
+      cta: { label: 'Accept invite', url: link },
+      outro: ["If you weren't expecting this, you can ignore this email."],
+    }),
+  };
+}
+
+export function testEmail(config: Config): RenderedEmail {
+  return {
+    subject: `Test email from ${config.BUSINESS_NAME}`,
+    attachCalendar: false,
+    ...layout(config, {
+      preheader: 'Booking emails are set up correctly.',
+      eyebrow: 'Test',
+      heading: 'Email is working',
+      intro: ['This is a test from your booking dashboard. If you can read this, customers will receive their booking emails.'],
+      rows: [],
     }),
   };
 }

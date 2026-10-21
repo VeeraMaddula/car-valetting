@@ -8,11 +8,14 @@ import { AppError, isUniqueViolation } from '../lib/errors.js';
 import type { IcsEvent } from '../lib/ics.js';
 import { displayPhone, isMobileNumber, maskPhone, normalizePhone } from '../lib/phone.js';
 import { formatReference, newReference, normalizeReference } from '../lib/reference.js';
-import { addDays, longDate, shortTime, zonedTimeToUtc } from '../lib/time.js';
+import { addDays, longDate, shortTime, todayInZone, zonedTimeToUtc } from '../lib/time.js';
 import { isoDate, optionalTrimmed, parse, trimmed } from '../lib/validate.js';
 import { isGoogleCalendarConfigured } from '../notifications/gcal.js';
 import { currentRules, slotRule, type UnavailableReason } from './availability.js';
+import { redeemDiscount, releaseDiscount } from './discounts.js';
+import { quoteService, SIZE_LABELS, toCents, VEHICLE_SIZES, type VehicleSize } from './pricing.js';
 import { effectiveEnd, effectiveStart, PERIOD_CODES, type PeriodCode } from './settings.js';
+import type { SiteSettings } from './site-settings.js';
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 export type DepositStatus = 'not_requested' | 'requested' | 'paid' | 'refunded' | 'waived';
@@ -44,6 +47,19 @@ export interface BookingRecord {
   depositPaymentIntentId: string | null;
   depositPaidAt: Date | null;
   depositRefundId: string | null;
+  /** The service is priced "from" (final price can vary). */
+  servicePriceFrom: boolean;
+  vehicleSize: VehicleSize | null;
+  /** Price snapshot at booking time, in cents. */
+  priceCents: number | null;
+  addons: BookingAddon[];
+  addonsCents: number;
+  discountId: string | null;
+  discountCode: string | null;
+  discountCents: number;
+  totalCents: number | null;
+  /** What the owner actually charged, when set. */
+  finalPriceCents: number | null;
   calendarToken: string;
   sequence: number;
   googleEventId: string | null;
@@ -53,8 +69,16 @@ export interface BookingRecord {
   updatedAt: Date;
 }
 
+export interface BookingAddon {
+  id: string;
+  name: string;
+  priceCents: number;
+}
+
 const SELECT_BOOKING = `
-  SELECT b.id, b.reference, b.user_id, b.service_code, s.name AS service_name, b.slot_date, b.period,
+  SELECT b.id, b.reference, b.user_id, b.service_code, s.name AS service_name, s.price_from AS service_price_from,
+         b.vehicle_size, b.price_cents, b.addons, b.addons_cents, b.discount_id, b.discount_code, b.discount_cents,
+         b.total_cents, b.final_price_cents, b.slot_date, b.period,
          p.label AS period_label, p.start_time, p.end_time, b.status, b.customer_name, b.customer_phone,
          b.customer_email, b.vehicle, b.handover, b.collection_address, b.notes, b.deposit_status,
          b.deposit_session_id, b.deposit_pay_url, b.deposit_link_expires_at, b.deposit_payment_intent_id,
@@ -92,6 +116,16 @@ function mapRow(r: any): BookingRecord {
     depositPaymentIntentId: r.deposit_payment_intent_id ?? null,
     depositPaidAt: r.deposit_paid_at ?? null,
     depositRefundId: r.deposit_refund_id ?? null,
+    servicePriceFrom: r.service_price_from ?? true,
+    vehicleSize: r.vehicle_size ?? null,
+    priceCents: r.price_cents === null || r.price_cents === undefined ? null : Number(r.price_cents),
+    addons: Array.isArray(r.addons) ? r.addons : [],
+    addonsCents: Number(r.addons_cents ?? 0),
+    discountId: r.discount_id ?? null,
+    discountCode: r.discount_code ?? null,
+    discountCents: Number(r.discount_cents ?? 0),
+    totalCents: r.total_cents === null || r.total_cents === undefined ? null : Number(r.total_cents),
+    finalPriceCents: r.final_price_cents === null || r.final_price_cents === undefined ? null : Number(r.final_price_cents),
     calendarToken: r.calendar_token,
     sequence: Number(r.sequence),
     googleEventId: r.google_event_id,
@@ -105,6 +139,20 @@ function mapRow(r: any): BookingRecord {
 export async function fetchBookingById(db: Queryable, id: string): Promise<BookingRecord | null> {
   const { rows } = await db.query(`${SELECT_BOOKING} WHERE b.id = $1`, [id]);
   return rows[0] ? mapRow(rows[0]) : null;
+}
+
+/**
+ * Bookings matching a condition on `b` (bookings) or `p` (slot periods), for the admin screens.
+ * `where` and `tail` must be fixed SQL written in this codebase; values always go in `params`.
+ */
+export async function findBookings(
+  db: Queryable,
+  where: string,
+  params: unknown[],
+  tail = 'ORDER BY b.slot_date DESC, p.sort DESC LIMIT 200',
+): Promise<BookingRecord[]> {
+  const { rows } = await db.query(`${SELECT_BOOKING} WHERE ${where} ${tail}`, params);
+  return rows.map(mapRow);
 }
 
 export async function fetchBookingByReference(db: Queryable, reference: string): Promise<BookingRecord | null> {
@@ -193,6 +241,25 @@ export function depositPayUrl(b: BookingRecord, now = new Date()): string | null
   return b.depositPayUrl;
 }
 
+const eurOrNull = (cents: number | null) => (cents === null ? null : cents / 100);
+
+/** What the customer was quoted. `from` means the final price can still change (e.g. a very large car). */
+export function priceView(b: BookingRecord) {
+  return {
+    serviceEur: eurOrNull(b.priceCents),
+    from: b.servicePriceFrom,
+    addons: b.addons.map((a) => ({ name: a.name, priceEur: a.priceCents / 100 })),
+    discount: b.discountCode ? { code: b.discountCode, amountEur: b.discountCents / 100 } : null,
+    totalEur: eurOrNull(b.totalCents),
+    finalEur: eurOrNull(b.finalPriceCents),
+  };
+}
+
+/** Revenue for a completed booking: what was charged if the owner recorded it, otherwise the quote. */
+export function bookingValueCents(b: Pick<BookingRecord, 'finalPriceCents' | 'totalCents'>): number {
+  return b.finalPriceCents ?? b.totalCents ?? 0;
+}
+
 export function toCustomerView(config: Config, b: BookingRecord, opts: ViewOptions = {}) {
   const now = new Date();
   const deadline = cancelDeadline(config, b);
@@ -209,6 +276,8 @@ export function toCustomerView(config: Config, b: BookingRecord, opts: ViewOptio
     phone: opts.maskPhone ? maskPhone(b.customerPhone) : displayPhone(b.customerPhone),
     email: opts.maskPhone ? null : b.customerEmail,
     vehicle: b.vehicle,
+    vehicleSize: b.vehicleSize ? { code: b.vehicleSize, label: SIZE_LABELS[b.vehicleSize] } : null,
+    price: priceView(b),
     handover: b.handover,
     collectionAddress: opts.maskPhone ? null : b.collectionAddress,
     deposit: {
@@ -244,6 +313,7 @@ export function toAdminView(config: Config, b: BookingRecord) {
     depositPaymentIntentId: b.depositPaymentIntentId,
     depositRefundId: b.depositRefundId,
     depositLinkExpiresAt: b.depositLinkExpiresAt?.toISOString() ?? null,
+    discountId: b.discountId,
     updatedAt: b.updatedAt.toISOString(),
   };
 }
@@ -304,11 +374,21 @@ function customerJobs(b: Pick<BookingRecord, 'id' | 'customerEmail' | 'customerP
   return jobs;
 }
 
-function ownerJobs(config: Config, bookingId: string, template: NotifyTemplate): JobInput[] {
+/** Alerts to the owner, following the switches in admin › Settings › Alerts to you. */
+function ownerJobs(config: Config, site: SiteSettings, bookingId: string, template: NotifyTemplate): JobInput[] {
+  const channels =
+    template === 'created' ? site.alerts.newBooking : template === 'cancelled_by_customer' ? site.alerts.customerCancels : { email: true, sms: true };
   const jobs: JobInput[] = [];
-  if (config.OWNER_EMAIL) jobs.push({ kind: 'notify', payload: { bookingId, channel: 'owner_email', template } });
-  if (config.OWNER_PHONE) jobs.push({ kind: 'notify', payload: { bookingId, channel: 'owner_sms', template } });
+  if (config.OWNER_EMAIL && channels.email) jobs.push({ kind: 'notify', payload: { bookingId, channel: 'owner_email', template } });
+  if (config.OWNER_PHONE && channels.sms) jobs.push({ kind: 'notify', payload: { bookingId, channel: 'owner_sms', template } });
   return jobs;
+}
+
+/** 10am the day after a completed valet, ask for a Google review (only when the owner has turned it on). */
+function reviewJobs(config: Config, site: SiteSettings, b: Pick<BookingRecord, 'id' | 'customerEmail'>, now = new Date()): JobInput[] {
+  if (!site.messages.reviewRequest || !site.messages.googleReviewUrl || !b.customerEmail) return [];
+  const runAt = zonedTimeToUtc(addDays(todayInZone(config.TIMEZONE, now), 1), '10:00', config.TIMEZONE);
+  return [{ kind: 'notify', payload: { bookingId: b.id, channel: 'customer_email', template: 'review_request' }, runAt }];
 }
 
 function calendarJobs(config: Config, bookingId: string): JobInput[] {
@@ -356,6 +436,14 @@ export const createBookingSchema = z
     handover: z.enum(['drop_off', 'collection']).default('drop_off'),
     collectionAddress: optionalTrimmed(300, 'Collection address'),
     notes: optionalTrimmed(1000, 'Notes'),
+    vehicleSize: z.enum(VEHICLE_SIZES as [VehicleSize, ...VehicleSize[]], { error: 'Choose your vehicle size' }).nullish(),
+    addons: z.array(z.uuid('Unknown extra')).max(10, 'Choose at most 10 extras').default([]),
+    discountCode: z
+      .string({ error: 'Enter a code' })
+      .trim()
+      .max(30, 'That code is too long')
+      .nullish()
+      .transform((v) => (v ? v : null)),
   })
   .superRefine((v, ctx) => {
     if (v.handover === 'collection' && !v.collectionAddress) {
@@ -374,24 +462,40 @@ export interface CreateContext {
   userId: string | null;
   userEmail: string | null;
   idempotencyKey?: string;
+  /** The owner booking on a customer's behalf: may book at short notice or on a closed day, and can confirm at once. */
+  admin?: { id: string; confirm: boolean };
 }
 
 /** Create a booking. The partial unique index guarantees one active booking per slot under any concurrency. */
 export async function createBooking(deps: Deps, raw: unknown, ctx: CreateContext): Promise<{ booking: BookingRecord; created: boolean }> {
   const input = parse(createBookingSchema, raw);
   const settings = await deps.settings.get();
+  const { site } = settings;
+  if (site.booking.paused && !ctx.admin) {
+    throw new AppError('BOOKING_PAUSED', site.booking.pausedMessage ?? `Online booking is paused right now. Please call us on ${deps.config.BUSINESS_PHONE}.`);
+  }
   const service = settings.services.find((s) => s.code === input.serviceCode && s.active);
   if (!service) throw new AppError('VALIDATION_FAILED', 'Please choose a service.', { serviceCode: 'Choose a service' });
   const period = settings.periods.find((p) => p.code === input.period);
   if (!period) throw new AppError('VALIDATION_FAILED', 'Please choose a slot.', { period: 'Choose a slot' });
   const phone = normalizePhone(input.phone);
   if (!phone) throw new AppError('VALIDATION_FAILED', 'Please check the highlighted fields.', { phone: 'Enter a valid phone number' });
+  // With prices by vehicle size, a booking without a size (e.g. from an older booking page) is quoted the base
+  // price; the owner can record what was actually charged.
+  const picked = [...new Set(input.addons)].map((id) => settings.addons.find((a) => a.id === id && a.active));
+  if (picked.some((a) => !a)) throw new AppError('VALIDATION_FAILED', 'One of the extras is no longer available.', { addons: 'No longer available' });
+  const addons: BookingAddon[] = picked.map((a) => ({ id: a!.id, name: a!.name, priceCents: a!.priceCents }));
+  const addonsCents = addons.reduce((t, a) => t + a.priceCents, 0);
 
   const rules = await currentRules(deps);
   const rule = slotRule(input.date, period, rules);
-  if (rule) throw new AppError('SLOT_UNAVAILABLE', UNAVAILABLE_MESSAGES[rule]);
+  // The owner can book outside the online rules (short notice, far ahead, a closed day), never into the past.
+  const ownerOverride = Boolean(ctx.admin) && (rule === 'too_soon' || rule === 'beyond_window' || rule === 'closed');
+  if (rule && !ownerOverride) throw new AppError('SLOT_UNAVAILABLE', UNAVAILABLE_MESSAGES[rule]);
 
+  const quote = quoteService(service, input.vehicleSize ?? null, site.pricing.bySize, rules.today);
   const email = input.email ?? ctx.userEmail ?? null;
+  const confirmNow = ctx.admin ? ctx.admin.confirm : site.booking.autoConfirm;
 
   for (let attempt = 1; ; attempt++) {
     try {
@@ -406,10 +510,23 @@ export async function createBooking(deps: Deps, raw: unknown, ctx: CreateContext
         );
         if (blocked.rowCount) throw new AppError('SLOT_UNAVAILABLE', UNAVAILABLE_MESSAGES.blocked);
 
+        const discount = input.discountCode
+          ? await redeemDiscount(c, input.discountCode, {
+              serviceCode: service.code,
+              serviceName: service.name,
+              priceCents: quote.priceCents,
+              phoneE164: phone.e164,
+              userId: ctx.userId,
+              today: rules.today,
+            })
+          : null;
+        const discountCents = discount?.cents ?? 0;
+        const total = quote.priceCents === null ? null : quote.priceCents + addonsCents - discountCents;
         const inserted = await c.query<{ id: string }>(
-          `INSERT INTO bookings (reference, user_id, service_code, slot_date, period, customer_name, customer_phone,
-             customer_email, vehicle, handover, collection_address, notes, calendar_token, idempotency_key)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          `INSERT INTO bookings (reference, user_id, service_code, slot_date, period, status, customer_name, customer_phone,
+             customer_email, vehicle, handover, collection_address, notes, calendar_token, idempotency_key,
+             vehicle_size, price_cents, addons, addons_cents, discount_id, discount_code, discount_cents, total_cents)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::JSONB, $19, $20, $21, $22, $23)
            RETURNING id`,
           [
             newReference(),
@@ -417,6 +534,7 @@ export async function createBooking(deps: Deps, raw: unknown, ctx: CreateContext
             service.code,
             input.date,
             input.period,
+            confirmNow ? 'confirmed' : 'pending',
             input.name,
             phone.e164,
             email,
@@ -426,19 +544,31 @@ export async function createBooking(deps: Deps, raw: unknown, ctx: CreateContext
             input.notes,
             randomToken(18),
             ctx.idempotencyKey ?? null,
+            input.vehicleSize ?? null,
+            quote.priceCents,
+            JSON.stringify(addons),
+            addonsCents,
+            discount?.id ?? null,
+            discount?.code ?? null,
+            discountCents,
+            total,
           ],
         );
         const id = inserted.rows[0].id;
-        await c.query('INSERT INTO booking_events (booking_id, type, actor) VALUES ($1, $2, $3)', [
-          id,
-          'created',
-          ctx.userId ? 'customer' : 'guest',
-        ]);
+        const actor = ctx.admin ? `admin:${ctx.admin.id}` : ctx.userId ? 'customer' : 'guest';
+        await c.query('INSERT INTO booking_events (booking_id, type, actor) VALUES ($1, $2, $3)', [id, 'created', actor]);
+        if (confirmNow) {
+          await c.query("INSERT INTO booking_events (booking_id, type, actor, created_at) VALUES ($1, 'confirmed', $2, now() + INTERVAL '1 millisecond')", [
+            id,
+            ctx.admin ? actor : 'system',
+          ]);
+        }
         const target = { id, customerEmail: email, customerPhone: phone.e164 };
-        const reminderAt = reminderTime(deps.config, input.date);
+        const reminderAt = site.messages.reminder ? reminderTime(deps.config, input.date) : null;
         await enqueue(c, [
-          ...customerJobs(target, 'created'),
-          ...ownerJobs(deps.config, id, 'created'),
+          // A booking confirmed straight away gets the "confirmed" message instead of "received".
+          ...customerJobs(target, confirmNow ? 'confirmed' : 'created'),
+          ...(ctx.admin ? [] : ownerJobs(deps.config, site, id, 'created')),
           ...calendarJobs(deps.config, id),
           ...(reminderAt ? customerJobs(target, 'reminder', reminderAt) : []),
         ]);
@@ -494,6 +624,7 @@ export async function bookingDetail(deps: Deps, booking: BookingRecord) {
 // ---------- Cancellation ----------
 
 export async function cancelByCustomer(deps: Deps, bookingId: string, reason: string | null, actor: 'customer' | 'guest'): Promise<BookingRecord> {
+  const { site } = await deps.settings.get();
   await withTx(deps.db, async (c) => {
     const { rows } = await c.query(`${SELECT_BOOKING} WHERE b.id = $1 FOR UPDATE OF b`, [bookingId]);
     if (!rows[0]) throw new AppError('NOT_FOUND', NOT_FOUND_MESSAGE);
@@ -513,9 +644,10 @@ export async function cancelByCustomer(deps: Deps, bookingId: string, reason: st
       [b.id, reason],
     );
     await c.query('INSERT INTO booking_events (booking_id, type, actor, note) VALUES ($1, $2, $3, $4)', [b.id, 'cancelled', actor, reason]);
+    await releaseDiscount(c, b.discountId);
     await enqueue(c, [
       ...customerJobs(b, 'cancelled'),
-      ...ownerJobs(deps.config, b.id, 'cancelled_by_customer'),
+      ...ownerJobs(deps.config, site, b.id, 'cancelled_by_customer'),
       ...calendarJobs(deps.config, b.id),
       ...depositJobsOnCancel(deps.config, b),
     ]);
@@ -575,13 +707,16 @@ export const adminUpdateSchema = z
     status: z.enum(['confirmed', 'completed', 'cancelled', 'no_show']).optional(),
     depositStatus: z.enum(['not_requested', 'requested', 'paid', 'refunded', 'waived']).optional(),
     note: optionalTrimmed(1000, 'Note'),
+    /** What was actually charged (null clears it). */
+    finalPriceEur: z.number().min(0).max(10_000).multipleOf(0.01, 'Use whole cents').nullable().optional(),
   })
-  .refine((v) => v.status || v.depositStatus || v.note, { message: 'Nothing to update' });
+  .refine((v) => v.status || v.depositStatus || v.note || v.finalPriceEur !== undefined, { message: 'Nothing to update' });
 
 export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw: unknown, adminId: string): Promise<BookingRecord> {
   const input = parse(adminUpdateSchema, raw);
   const reference = normalizeReference(referenceInput);
   if (!reference) throw new AppError('NOT_FOUND', 'Booking not found.');
+  const { site } = await deps.settings.get();
   let bookingId = '';
   let changed = false;
   await withTx(deps.db, async (c) => {
@@ -603,8 +738,15 @@ export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw
       if (input.status === 'cancelled') jobs.push(...customerJobs(b, 'cancelled'), ...depositJobsOnCancel(deps.config, b));
       if (input.status === 'completed' && b.customerEmail) {
         jobs.push({ kind: 'notify', payload: { bookingId: b.id, channel: 'customer_email', template: 'completed' } });
+        jobs.push(...reviewJobs(deps.config, site, b));
       }
+      if (input.status === 'cancelled') await releaseDiscount(c, b.discountId);
       jobs.push(...calendarJobs(deps.config, b.id));
+    }
+    const priceChanged = input.finalPriceEur !== undefined;
+    const finalCents = input.finalPriceEur === undefined || input.finalPriceEur === null ? null : toCents(input.finalPriceEur);
+    if (priceChanged && finalCents !== b.finalPriceCents) {
+      events.push({ type: 'price_set', note: finalCents === null ? 'Charged amount cleared' : `Charged €${(finalCents / 100).toFixed(2)}` });
     }
     if (input.depositStatus && input.depositStatus !== b.depositStatus) {
       if (input.depositStatus === 'refunded' && b.depositStatus !== 'paid') {
@@ -629,10 +771,11 @@ export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw
          deposit_status = COALESCE($3, deposit_status),
          cancelled_at = CASE WHEN $2 = 'cancelled' THEN now() ELSE cancelled_at END,
          cancel_reason = CASE WHEN $2 = 'cancelled' THEN $4 ELSE cancel_reason END,
+         final_price_cents = CASE WHEN $6 THEN $7 ELSE final_price_cents END,
          sequence = sequence + $5,
          updated_at = now()
        WHERE id = $1`,
-      [b.id, statusChanged ? input.status : null, input.depositStatus ?? null, input.note, statusChanged ? 1 : 0],
+      [b.id, statusChanged ? input.status : null, input.depositStatus ?? null, input.note, statusChanged ? 1 : 0, priceChanged, finalCents],
     );
     for (const e of events) {
       await c.query('INSERT INTO booking_events (booking_id, type, actor, note) VALUES ($1, $2, $3, $4)', [b.id, e.type, `admin:${adminId}`, e.note]);

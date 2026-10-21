@@ -3,6 +3,7 @@ import type { Deps } from '../deps.js';
 import { withTx, type Queryable } from '../db/pool.js';
 import { enqueue, type JobInput } from '../jobs/queue.js';
 import { isMobileNumber } from '../lib/phone.js';
+import { isUuid } from '../lib/validate.js';
 import { createDepositSession, expireDepositSession, refundDeposit, type Stripe } from '../payments/stripe.js';
 import { ACTIVE_STATUSES, fetchBookingById, type BookingRecord } from './bookings.js';
 
@@ -164,7 +165,7 @@ async function applyToBooking(c: Queryable, { config }: Deps, event: Stripe.Even
 function bookingIdOf(event: Stripe.Event): string | null {
   const obj = event.data.object as { metadata?: Record<string, string> | null; client_reference_id?: string | null };
   const id = obj.metadata?.bookingId ?? obj.client_reference_id ?? null;
-  return id && /^[0-9a-f-]{36}$/i.test(id) ? id : null;
+  return id && isUuid(id) ? id : null;
 }
 
 export type { BookingRecord };

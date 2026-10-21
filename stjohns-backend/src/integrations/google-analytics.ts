@@ -61,9 +61,24 @@ export function buildRequests(n: number) {
         orderBys: desc('screenPageViews'),
         limit: 10,
       },
+      // Funnel: people who fired each booking event the website sends (see analytics.js / booking.js).
+      {
+        dateRanges: [cur],
+        dimensions: [{ name: 'eventName' }],
+        metrics: [{ name: 'totalUsers' }],
+        dimensionFilter: { filter: { fieldName: 'eventName', inListFilter: { values: [...FUNNEL_EVENTS] } } },
+      },
+      // Funnel: people who opened the booking page (however they got there).
+      {
+        dateRanges: [cur],
+        metrics: [{ name: 'activeUsers' }],
+        dimensionFilter: { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: '/booking' } } },
+      },
     ],
   ];
 }
+
+const FUNNEL_EVENTS = ['begin_booking', 'select_slot', 'booking_submitted'] as const;
 
 const num = (v: string | undefined) => {
   const n = Number(v ?? 0);
@@ -89,6 +104,8 @@ export interface AnalyticsSummary {
   devices: { name: string; visitors: number; share: number }[];
   towns: { name: string; visitors: number }[];
   pages: { path: string; title: string; views: number; avgSecondsPerView: number }[];
+  /** People at each step on the way to booking, from GA (the "Booked" step comes from our own bookings). */
+  funnel: { visited: number; openedBookingPage: number; pickedSlot: number; submitted: number };
   activeNow: number;
   fetchedAt: string;
 }
@@ -104,7 +121,8 @@ const share = (part: number, whole: number) => (whole ? Math.round((part / whole
 /** Turn raw GA reports into the dashboard's shape. Pure, so it is unit-tested with fixtures. */
 export function assembleSummary(n: number, today: string, first: GaReport[], second: GaReport[], realtime: GaReport): AnalyticsSummary {
   const [cur, prev, daily, sources, devices] = first;
-  const [towns, pages] = second;
+  const [towns, pages, events, bookingPage] = second;
+  const eventUsers = (name: string) => met((events?.rows ?? []).find((r) => dim(r, 0) === name) ?? {}, 0);
 
   // GA leaves out days with no visits; fill them so the chart has one point per day.
   const byDate = new Map<string, { visitors: number; pageViews: number }>();
@@ -119,7 +137,15 @@ export function assembleSummary(n: number, today: string, first: GaReport[], sec
   }
 
   const sourceRows = (sources?.rows ?? []).map((r) => ({ name: dim(r, 0) || 'Other', sessions: met(r, 0) }));
-  const sourceTotal = sourceRows.reduce((t, r) => t + r.sessions, 0);
+  // GA returns only the top channels: count everything else as "Other", so shares are of all visits, not just the listed ones.
+  const listed = sourceRows.reduce((t, r) => t + r.sessions, 0);
+  const rest = totalsOf(cur).sessions - listed;
+  if (rest > 0) {
+    const other = sourceRows.find((r) => r.name === 'Other');
+    if (other) other.sessions += rest;
+    else sourceRows.push({ name: 'Other', sessions: rest });
+  }
+  const sourceTotal = listed + Math.max(rest, 0);
   const deviceRows = (devices?.rows ?? []).map((r) => ({ name: dim(r, 0) || 'other', visitors: met(r, 0) }));
   const deviceTotal = deviceRows.reduce((t, r) => t + r.visitors, 0);
 
@@ -139,6 +165,13 @@ export function assembleSummary(n: number, today: string, first: GaReport[], sec
       const views = met(r, 0);
       return { path: dim(r, 0), title: dim(r, 1), views, avgSecondsPerView: views ? Math.round(met(r, 1) / views) : 0 };
     }),
+    funnel: {
+      visited: totalsOf(cur).visitors,
+      // Someone clicking "Book" counts even before the page has loaded, so take whichever is higher.
+      openedBookingPage: Math.max(met(bookingPage?.rows?.[0] ?? {}, 0), eventUsers('begin_booking')),
+      pickedSlot: eventUsers('select_slot'),
+      submitted: eventUsers('booking_submitted'),
+    },
     activeNow: met(realtime.rows?.[0] ?? {}, 0),
     fetchedAt: new Date().toISOString(),
   };
@@ -174,6 +207,17 @@ function fetchRealtime(config: Config): Promise<number> {
     realtimeCache = null;
   });
   return value;
+}
+
+/** "Refresh": forget cached reports so the next request asks Google again. */
+export function clearAnalyticsCache(): void {
+  summaryCache.clear();
+  realtimeCache = null;
+}
+
+/** "N people on the site right now", polled by the dashboard (cached for a minute). */
+export function getActiveNow(config: Config): Promise<number> {
+  return fetchRealtime(config);
 }
 
 export async function getAnalyticsSummary(config: Config, n: AnalyticsRange): Promise<AnalyticsSummary> {

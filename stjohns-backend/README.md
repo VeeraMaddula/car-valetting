@@ -40,30 +40,33 @@ See [Choosing the region](#choosing-the-region).
 
 ## Local development
 
-Requirements: Node.js 22.9+, and either Docker or a local PostgreSQL.
+Requirements: Node.js 22.9+ and PostgreSQL: a Neon **dev branch** (recommended, same engine as production) or
+`docker compose up -d` for a local PostgreSQL 18 on `localhost:5432`.
 
 ```bash
-cp .env.example .env
-docker compose up -d          # CockroachDB on localhost:26257 (or point DATABASE_URL at any local PostgreSQL)
+cp .env.example .env          # set DATABASE_URL (see .env.example)
 npm install
-npm run migrate               # creates tables and seeds services + slots
+npm run db:setup              # creates tables, seeds services + slots, prints region and latency
 npm run dev                   # API on http://localhost:8080/api/v1
 ```
-
-Without Docker, download CockroachDB for your OS from https://www.cockroachlabs.com/docs/releases/ and run
-`cockroach start-single-node --insecure --listen-addr=127.0.0.1:26257`.
 
 Tests:
 
 ```bash
-npm test                                   # unit tests
-TEST_DATABASE_URL="postgresql://root@127.0.0.1:26257/defaultdb?sslmode=disable" npm test   # + end-to-end API tests
+npm test                      # unit tests; end-to-end tests too when TEST_DATABASE_URL is set
 npm run typecheck
 ```
 
-The end-to-end suite creates and drops its own database. It covers booking, double-booking races, idempotent retries,
-validation, tracking, cancellation, accounts, claiming guest bookings, admin actions, slot closures, calendar files,
-password reset and the notification worker.
+For the end-to-end tests, create a Neon branch called `dev` (Branches › Create branch, from `production`,
+"Schema only" if offered), open **Connect** for that branch with **Connection pooling off**, and add the string to
+`.env` as `TEST_DATABASE_URL=…?sslmode=verify-full`. Each test file creates and drops its own throwaway database
+there, and the tests refuse to run if that URL points at the production branch.
+
+They cover booking, double-booking races, idempotent retries, validation, tracking, cancellation, accounts, claiming
+guest bookings, deposits, and the whole admin dashboard: permissions (owner vs bookings-only staff), settings,
+pausing bookings, auto-confirm, prices by vehicle size, extras, sale prices, discount codes (including simultaneous
+use of a single-use code), customers, CSV export, GDPR erasure, photo uploads, the slideshow, before & after pairs,
+the overview, team invites, connected-service checks and the notification worker.
 
 ## Production setup
 
@@ -235,7 +238,8 @@ Browsers must call with `credentials: 'include'` for accounts to work.
 | POST | `/bookings/track` | anyone | `{reference, phone}` → booking + timeline |
 | POST | `/bookings/track/cancel` | anyone | `{reference, phone, reason?}` |
 | GET | `/bookings/:ref/calendar.ics?t=` | link holder | Apple/Google calendar file |
-| POST | `/auth/register` | anyone | `{username, email, password, fullName, phone}` |
+| POST | `/auth/register` | anyone | `{username, email, password, fullName, phone, inviteToken?}` (with a team invite token the account gets the invited access) |
+| POST | `/auth/invites/accept` | signed in | `{token}`: accept a team invite sent to your account's email address |
 | POST | `/auth/login` | anyone | `{login, password}` (login = username or email) |
 | POST | `/auth/logout` | signed in | |
 | GET | `/auth/me` | anyone | `{user}` or `{user: null}` |
@@ -245,16 +249,57 @@ Browsers must call with `credentials: 'include'` for accounts to work.
 | GET | `/me/bookings/:ref` | signed in | One booking + timeline |
 | POST | `/me/bookings/:ref/cancel` | signed in | `{reason?}` |
 | POST | `/me/bookings/claim` | signed in | `{reference, phone}` adds a guest booking to the account |
-| GET | `/admin/bookings?from=&to=&status=` | admin | Bookings with full details |
-| GET/PATCH | `/admin/bookings/:ref` | admin | Details + history / `{status?, depositStatus?, note?}`. `depositStatus: requested` sends a Stripe link; `refunded` refunds a paid deposit |
+| POST | `/discounts/check` | anyone | `{code, serviceCode, vehicleSize?}` → `{valid, discountEur, totalEur}` or `{valid: false, message}` (doesn't use the code up; "first booking" and "once per customer" are checked when booking) |
+| GET | `/gallery` | anyone | Homepage slideshow (+ seconds per slide), gallery photos, the published before & after pair |
+| GET | `/images/:id/:width.webp` | anyone | Photo files (cached for a year; a new upload gets a new URL) |
 | POST | `/webhooks/stripe` | Stripe | Signed webhook: marks deposits paid/refunded, expires links |
-| GET/POST/DELETE | `/admin/blocks` | admin | Close a slot or day: `{date, period: all\|morning\|afternoon\|evening, reason?}` |
-| GET/PUT | `/admin/slot-periods/:code` | admin | `{label, startTime, endTime, daysOfWeek, active}` (times `HH:MM` or null) |
-| GET | `/admin/jobs?status=failed`, POST `/admin/jobs/:id/retry` | admin | Notification delivery problems |
-| GET | `/admin/analytics?range=7\|30\|90` | admin | Website visitors from Google Analytics + bookings for the period |
 | GET | `/admin/calendar.ics?key=` | feed key | Owner's subscribed calendar |
 
-Booking body: `{serviceCode: mini|full|wheel, date: YYYY-MM-DD, period, name, phone, email?, vehicle, handover?: drop_off|collection, collectionAddress?, notes?}`.
+Booking body: `{serviceCode, date: YYYY-MM-DD, period, name, phone, email?, vehicle, vehicleSize?: small|large|suv (when prices are by vehicle size; without it the base price is quoted), addons?: [addonId], discountCode?, handover?: drop_off|collection, collectionAddress?, notes?}`.
+Each booking stores what the customer was quoted (`price`: service, extras, discount, total) so later price changes never alter it.
+
+### Admin dashboard
+
+"Staff" are team members with **Bookings only** access; "owner" means full access (`role: admin`).
+Money in requests and responses is in euros; it is stored in cents.
+
+| Method | Path | Who | Purpose |
+|---|---|---|---|
+| GET | `/admin/overview?range=7\|30\|90` | owner | Tiles vs the previous period, bookings chart, today's slots, needs-attention counts, service mix, activity feed |
+| GET | `/admin/badges` | staff | `{pendingBookings, failedNotifications}` for the sidebar |
+| GET | `/admin/bookings?from=&to=&status=` | staff | Bookings with full details |
+| POST | `/admin/bookings` | staff | Book on a customer's behalf: booking body + `{confirm?: true, customerUserId?}`. Allowed at short notice, far ahead or on a closed day |
+| GET/PATCH | `/admin/bookings/:ref` | staff | Details + history / `{status?, depositStatus?, note?, finalPriceEur?}`. `depositStatus: requested` sends a Stripe link; `refunded` refunds a paid deposit |
+| GET/POST/DELETE | `/admin/blocks` | staff | Close a slot or day: `{date, period: all\|morning\|afternoon\|evening, reason?}` |
+| GET / PUT | `/admin/slot-periods` / `/admin/slot-periods/:code` | staff / owner | `{label, startTime, endTime, daysOfWeek, active}` (times `HH:MM` or null) |
+| GET | `/admin/jobs?status=failed`, POST `/admin/jobs/:id/retry` | staff | Notification delivery problems |
+| GET | `/admin/notifications/health` | staff | Email / SMS / Google Calendar: configured, delivered and failed in the last 7 days |
+| GET/PUT | `/admin/pricing` | owner | One save: `{bySize, depositEur, services: [{code (null = new), name, description, durationLabel, priceFrom, active, featured, prices: {small, large, suv}}] (display order), addons: [{id (null = new), name, priceEur, active}]}` |
+| GET/PUT | `/admin/sales` | owner | `{sales: [{code, enabled, priceEur, startsOn, endsOn}]}`; larger sizes get the same percentage off |
+| GET/POST | `/admin/discounts` | owner | Codes + stats / `{code, kind: percent\|fixed, value, serviceCodes, startsOn, endsOn, maxUses, firstBookingOnly, onePerCustomer}` |
+| PUT | `/admin/discounts/:id`, POST `…/pause`, `…/resume` | owner | Edit, pause or resume a code (codes are never deleted, so history stays intact) |
+| GET | `/admin/customers?q=&type=all\|account\|guest\|returning&sort=recent\|bookings\|spent\|name` | owner | Customers + tile stats |
+| GET | `/admin/customers.csv?…` | owner | The same list as a CSV download |
+| GET/DELETE | `/admin/customers/:key` | owner | Details, bookings and private note / delete personal data (GDPR; refused while they have an upcoming booking). `key` = `user:<id>` or `guest:<+353…>`, URL-encoded |
+| PUT | `/admin/customers/:key/note` | owner | `{note}` (empty deletes it) |
+| POST | `/admin/customers/:key/password-reset` | owner | Emails an account holder a reset link |
+| POST | `/admin/images` | owner | Upload one photo: the file itself as the body, `Content-Type: image/jpeg\|png\|webp`, max 20 MB → `{image}` |
+| GET/POST/PUT | `/admin/slides` | owner | Slideshow / add `{imageId, caption?, alt?}` (starts hidden) / publish `{seconds, slides: [{id, caption, alt, visible}]}` in display order |
+| DELETE | `/admin/slides/:id` | owner | Remove a slide (and its photo) |
+| GET/POST | `/admin/photos` | owner | Gallery photos + counts / add `{items: [{imageId, caption?, category: exterior\|interior\|wheels\|detail}]}` |
+| PATCH/DELETE | `/admin/photos/:id` | owner | `{caption?, category?, featured?}` ("featured" = show on homepage) |
+| GET/POST | `/admin/before-after` | owner | Pairs / `{title, beforeImageId, afterImageId}` |
+| PATCH/DELETE | `/admin/before-after/:id` | owner | `{title?, published?}`; publishing one pair hides the others |
+| GET/PUT | `/admin/settings` | owner | `{booking: {paused, pausedMessage, maxWeeksAhead, minNoticeHours, cancelCutoffHours, autoConfirm}, business: {name, phone, publicEmail, address, openingHours}, alerts: {ownerEmail, ownerPhone, newBooking: {email, sms}, customerCancels: {email, sms}, dailySummary}, messages: {reminder, reviewRequest, googleReviewUrl}}` |
+| GET | `/admin/integrations` | owner | Which services are connected (+ the iPhone calendar link) |
+| POST | `/admin/integrations/email/test`, `…/sms/test`, `…/calendar/sync` | owner | "Send test" / "Sync now" |
+| GET | `/admin/team` | owner | Members + open invites |
+| POST | `/admin/team/invites` | owner | `{email, access: bookings\|full}`: emails a link (7 days). New people register with it (`inviteToken` in `/auth/register`); people with an account sign in and call `POST /auth/invites/accept {token}`. Access only comes through the link, which proves the inbox is theirs |
+| DELETE | `/admin/team/invites/:id`, `/admin/team/members/:userId` | owner | Revoke an invite / remove access (not your own, and never the last full-access login) |
+| GET | `/admin/analytics?range=&refresh=1`, `/admin/analytics/live` | owner | Google Analytics summary (+ visit-to-booking funnel) / people on the site now |
+
+Settings saved in the dashboard override the matching `.env` values (business details, booking rules, owner
+alerts, deposit amount) as soon as they're saved. Sections never saved keep using `.env`.
 
 ## Booking rules (env-configurable)
 
@@ -273,3 +318,11 @@ Booking body: `{serviceCode: mini|full|wheel, date: YYYY-MM-DD, period, name, ph
 - Tracking needs the reference **and** the phone number; failed lookups don't reveal which part was wrong.
 - Rate limits on booking, tracking, login, registration and password reset. Logs redact cookies.
 - Reset tokens are single-use, last 1 hour, and are wiped from the job queue once emailed. A reset signs out all sessions.
+- Team roles: "Bookings only" staff can't reach prices, discounts, photos, customers, analytics, settings or team.
+  Removing someone's access signs them out everywhere. Invite links are single-use, tied to the invited email and
+  last 7 days.
+- Uploaded photos are re-encoded, which removes EXIF data including the GPS location phones record.
+- "Delete personal data" removes a customer's name, contact details, vehicle, addresses and notes from every booking
+  and deletes their account; bookings stay for the owner's records as "Deleted customer".
+- CSV exports quote every cell and neutralise values starting with `= + - @`, so a customer name can't run as a
+  spreadsheet formula.

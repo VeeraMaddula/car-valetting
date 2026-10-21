@@ -38,9 +38,18 @@ export function requireUser(req: FastifyRequest): SessionUser {
   return req.user;
 }
 
+/** Full access: prices, discounts, photos, customers, analytics, settings and team. */
 export function requireAdmin(req: FastifyRequest): SessionUser {
   const user = requireUser(req);
+  if (user.role === 'staff') throw new AppError('FORBIDDEN', 'Your access covers bookings only. Ask the owner for full access.');
   if (user.role !== 'admin') throw new AppError('FORBIDDEN', 'You do not have access to this page.');
+  return user;
+}
+
+/** Bookings access: the owner and team members with "Bookings only". */
+export function requireStaff(req: FastifyRequest): SessionUser {
+  const user = requireUser(req);
+  if (user.role !== 'admin' && user.role !== 'staff') throw new AppError('FORBIDDEN', 'You do not have access to this page.');
   return user;
 }
 

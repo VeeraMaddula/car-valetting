@@ -43,14 +43,16 @@ export async function warmPool(pool: pg.Pool, connections: number): Promise<void
 
 function isRetryable(err: unknown): boolean {
   const e = err as { code?: string; message?: string };
-  return e?.code === '40001' || /restart transaction/i.test(e?.message ?? '');
+  // 40001: serialization conflict; 40P01: deadlock (PostgreSQL aborts one side, which can simply run again).
+  return e?.code === '40001' || e?.code === '40P01' || /restart transaction/i.test(e?.message ?? '');
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Run fn in a SERIALIZABLE transaction (CockroachDB's default), retrying on serialization
- * conflicts (SQLSTATE 40001) as CockroachDB recommends. fn must only touch the database.
+ * Run fn in a transaction (READ COMMITTED on PostgreSQL/Neon), retrying on serialization conflicts
+ * (SQLSTATE 40001). Correctness relies on unique indexes and SELECT … FOR UPDATE row locks, not on the
+ * isolation level. fn must only touch the database, since it may run more than once.
  */
 export async function withTx<T>(pool: pg.Pool, fn: (client: pg.PoolClient) => Promise<T>, maxAttempts = 6): Promise<T> {
   for (let attempt = 1; ; attempt++) {

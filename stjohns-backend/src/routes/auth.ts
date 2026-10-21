@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Deps } from '../deps.js';
+import { acceptInvite } from '../domain/team.js';
 import { createSession, destroySession, login, publicUser, register, requestPasswordReset, resetPassword } from '../domain/users.js';
-import { clearSessionCookie, setSessionCookie } from '../plugins/auth.js';
+import { clearSessionCookie, requireUser, setSessionCookie } from '../plugins/auth.js';
 
 const limit = (max: number, minutes: number) => ({ config: { rateLimit: { max, timeWindow: `${minutes} minutes` } } });
 
@@ -38,6 +39,9 @@ export async function authRoutes(app: FastifyInstance, { deps }: { deps: Deps })
     reply.status(202);
     return { ok: true, message: "If an account exists for that email, we've sent a reset link." };
   });
+
+  /** A signed-in account accepts a team invite that was emailed to its own address. */
+  app.post('/auth/invites/accept', limit(10, 10), async (req) => ({ user: publicUser(await acceptInvite(deps, requireUser(req), req.body)) }));
 
   app.post('/auth/password/reset', limit(10, 15), async (req, reply) => {
     await resetPassword(deps, req.body);
