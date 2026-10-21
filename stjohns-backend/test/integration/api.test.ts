@@ -1,5 +1,5 @@
-// End-to-end API tests against a real CockroachDB.
-// Run: docker compose up -d  then  TEST_DATABASE_URL=postgresql://root@localhost:26257/defaultdb?sslmode=disable npm test
+// End-to-end API tests against real PostgreSQL (a Neon dev branch).
+// Run: put TEST_DATABASE_URL=<dev branch connection string> in .env, then npm test
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
@@ -11,17 +11,16 @@ import { SettingsCache } from '../../src/domain/settings.js';
 import { hashPassword } from '../../src/domain/users.js';
 import { JobWorker } from '../../src/jobs/worker.js';
 import { addDays, todayInZone } from '../../src/lib/time.js';
+import { createTestDatabase, TEST_DATABASE_URL, type TestDatabase } from './test-db.js';
 
-const BASE_URL = process.env.TEST_DATABASE_URL;
-const suite = BASE_URL ? describe : describe.skip;
+const suite = TEST_DATABASE_URL ? describe : describe.skip;
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const FEED_KEY = 'k'.repeat(32);
 const SITE = 'http://localhost:5500';
 
-suite('booking API on CockroachDB', () => {
-  const dbName = `sjp_test_${Date.now()}`;
-  let root: pg.Pool;
+suite('booking API on PostgreSQL', () => {
+  let testDb: TestDatabase;
   let pool: pg.Pool;
   let app: App;
   let deps: Deps;
@@ -56,13 +55,10 @@ suite('booking API on CockroachDB', () => {
   });
 
   beforeAll(async () => {
-    root = new pg.Pool({ connectionString: BASE_URL });
-    await root.query(`CREATE DATABASE ${dbName}`);
-    const url = new URL(BASE_URL!);
-    url.pathname = `/${dbName}`;
+    testDb = await createTestDatabase('sjp_api');
     const config = loadConfig({
       NODE_ENV: 'test',
-      DATABASE_URL: url.toString(),
+      DATABASE_URL: testDb.url,
       PUBLIC_SITE_URL: SITE,
       PUBLIC_API_URL: 'http://localhost:8080',
       ALLOWED_ORIGINS: SITE,
@@ -73,7 +69,7 @@ suite('booking API on CockroachDB', () => {
     });
     pool = createPool(config);
     await migrate(pool, () => undefined);
-    deps = { config, db: pool, settings: new SettingsCache(pool), wakeWorker: () => undefined };
+    deps = { config, db: pool, settings: new SettingsCache(pool, config), wakeWorker: () => undefined };
     app = await buildApp(deps, { logger: false, rateLimit: false });
 
     // Pick days where all three slots are free, at least 2 days out so they're outside the 24h cancellation cut-off.
@@ -85,8 +81,7 @@ suite('booking API on CockroachDB', () => {
   afterAll(async () => {
     await app?.close();
     await pool?.end();
-    await root?.query(`DROP DATABASE IF EXISTS ${dbName} CASCADE`).catch(() => undefined);
-    await root?.end();
+    await testDb?.drop().catch(() => undefined);
   });
 
   it('serves config, health and availability', async () => {

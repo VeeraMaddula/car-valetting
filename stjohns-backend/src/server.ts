@@ -7,7 +7,7 @@ import { JobWorker } from './jobs/worker.js';
 
 const config = loadConfig();
 const db = createPool(config);
-const settings = new SettingsCache(db);
+const settings = new SettingsCache(db, config);
 let worker: JobWorker | null = null;
 const deps: Deps = { config, db, settings, wakeWorker: () => worker?.wake() };
 

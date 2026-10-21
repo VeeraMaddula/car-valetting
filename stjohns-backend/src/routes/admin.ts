@@ -6,8 +6,10 @@ import {
   adminListBookings,
   adminUpdateBooking,
   bookingIcsEvent,
+  createBooking,
   feedBookings,
   fetchBookingByReference,
+  idempotencyKeySchema,
   toAdminView,
   upcomingActiveBookingIds,
 } from '../domain/bookings.js';
@@ -18,12 +20,28 @@ import { AppError } from '../lib/errors.js';
 import { buildIcs } from '../lib/ics.js';
 import { normalizeReference } from '../lib/reference.js';
 import { addDays, todayInZone } from '../lib/time.js';
-import { isoDate, optionalTrimmed, parse, trimmed } from '../lib/validate.js';
-import { ANALYTICS_RANGES, getAnalyticsSummary, isAnalyticsConfigured, type AnalyticsRange } from '../integrations/google-analytics.js';
+import { isoDate, isUuid, optionalTrimmed, parse, trimmed } from '../lib/validate.js';
+import {
+  ANALYTICS_RANGES,
+  clearAnalyticsCache,
+  getActiveNow,
+  getAnalyticsSummary,
+  isAnalyticsConfigured,
+  type AnalyticsRange,
+} from '../integrations/google-analytics.js';
 import { isGoogleCalendarConfigured } from '../notifications/gcal.js';
-import { requireAdmin } from '../plugins/auth.js';
+import { requireAdmin, requireStaff } from '../plugins/auth.js';
 
 const admin = { preHandler: async (req: Parameters<typeof requireAdmin>[0]) => void requireAdmin(req) };
+/** Owner and "Bookings only" team members. */
+const staff = { preHandler: async (req: Parameters<typeof requireStaff>[0]) => void requireStaff(req) };
+
+const adminBookingExtras = z.object({
+  /** Book as confirmed straight away (the owner has already agreed it with the customer). */
+  confirm: z.boolean().default(true),
+  /** Link the booking to a customer's account ("Book for this customer"). */
+  customerUserId: z.uuid().nullish(),
+});
 
 const rangeQuery = z.object({ from: isoDate, to: isoDate });
 const analyticsQuery = z.object({
@@ -32,6 +50,10 @@ const analyticsQuery = z.object({
     .default(30)
     .refine((v): v is AnalyticsRange => (ANALYTICS_RANGES as readonly number[]).includes(v), 'Use 7, 30 or 90')
     .transform((v) => v as AnalyticsRange),
+  refresh: z
+    .enum(['1', 'true'])
+    .optional()
+    .transform((v) => Boolean(v)),
 });
 const blockBody = z.object({
   date: isoDate,
@@ -56,12 +78,67 @@ const periodBody = z
 export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }): Promise<void> {
   const { config, db } = deps;
 
-  app.get('/admin/bookings', admin, async (req, reply) => {
+  app.get('/admin/bookings', staff, async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     return { bookings: await adminListBookings(deps, req.query) };
   });
 
-  app.get('/admin/bookings/:reference', admin, async (req, reply) => {
+  /** "New booking" / "Book for this customer": the owner may book at short notice or on a closed day. */
+  app.post('/admin/bookings', staff, async (req, reply) => {
+    const idempotencyKey = parse(idempotencyKeySchema, req.headers['idempotency-key']);
+    const extras = parse(adminBookingExtras, req.body ?? {});
+    let userEmail: string | null = null;
+    if (extras.customerUserId) {
+      const { rows } = await db.query<{ email: string }>("SELECT email FROM users WHERE id = $1 AND role = 'customer'", [extras.customerUserId]);
+      if (!rows[0]) throw new AppError('VALIDATION_FAILED', 'That customer account was not found.', { customerUserId: 'Not found' });
+      userEmail = rows[0].email;
+    }
+    const { booking, created } = await createBooking(deps, req.body, {
+      userId: extras.customerUserId ?? null,
+      userEmail,
+      idempotencyKey,
+      admin: { id: req.user!.id, confirm: extras.confirm },
+    });
+    reply.status(created ? 201 : 200);
+    return { booking: toAdminView(config, booking) };
+  });
+
+  /** Sidebar badges. */
+  app.get('/admin/badges', staff, async (_req, reply) => {
+    const { rows } = await db.query<{ pending: number; failed: number }>(
+      `SELECT (SELECT count(*) FROM bookings WHERE status = 'pending' AND slot_date >= $1) AS pending,
+              (SELECT count(*) FROM jobs WHERE status = 'failed' AND kind = 'notify' AND updated_at >= now() - INTERVAL '7 days') AS failed`,
+      [todayInZone(config.TIMEZONE)],
+    );
+    reply.header('Cache-Control', 'no-store');
+    return { pendingBookings: Number(rows[0].pending), failedNotifications: Number(rows[0].failed) };
+  });
+
+  /** Email / SMS / Google Calendar health for the last 7 days (the bookings page "Notifications" box). */
+  app.get('/admin/notifications/health', staff, async (_req, reply) => {
+    const { rows } = await db.query<{ channel: string; failed: number; ok: number }>(
+      `SELECT CASE WHEN kind = 'gcal.sync' THEN 'calendar'
+                   WHEN payload->>'channel' LIKE '%sms' THEN 'sms'
+                   ELSE 'email' END AS channel,
+              count(*) FILTER (WHERE status = 'failed') AS failed,
+              count(*) FILTER (WHERE status = 'done') AS ok
+       FROM jobs
+       WHERE updated_at >= now() - INTERVAL '7 days' AND kind IN ('notify', 'gcal.sync', 'auth.password_reset', 'owner.daily_summary', 'team.invite')
+       GROUP BY 1`,
+    );
+    const of = (channel: string) => {
+      const r = rows.find((x) => x.channel === channel);
+      return { failed7d: Number(r?.failed ?? 0), delivered7d: Number(r?.ok ?? 0) };
+    };
+    reply.header('Cache-Control', 'no-store');
+    return {
+      email: { configured: Boolean(config.RESEND_API_KEY), ...of('email') },
+      sms: { configured: Boolean(config.SENDMODE_ACCESS_KEY), ...of('sms') },
+      calendar: { configured: isGoogleCalendarConfigured(config), ...of('calendar') },
+    };
+  });
+
+  app.get('/admin/bookings/:reference', staff, async (req, reply) => {
     const ref = normalizeReference((req.params as { reference: string }).reference);
     const booking = ref ? await fetchBookingByReference(db, ref) : null;
     if (!booking) throw new AppError('NOT_FOUND', 'Booking not found.');
@@ -77,12 +154,12 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
   });
 
   /** Confirm, cancel, complete, mark no-show, request/record the deposit, or add a note. */
-  app.patch('/admin/bookings/:reference', admin, async (req) => {
+  app.patch('/admin/bookings/:reference', staff, async (req) => {
     const booking = await adminUpdateBooking(deps, (req.params as { reference: string }).reference, req.body, req.user!.id);
     return { booking: toAdminView(config, booking) };
   });
 
-  app.get('/admin/blocks', admin, async (req) => {
+  app.get('/admin/blocks', staff, async (req) => {
     const q = parse(rangeQuery, req.query);
     const { rows } = await db.query(
       'SELECT id, slot_date, period, reason, created_at FROM blocked_slots WHERE slot_date BETWEEN $1 AND $2 ORDER BY slot_date, period',
@@ -92,7 +169,7 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
   });
 
   /** Close a slot or a whole day (holidays, weather). Existing bookings are left alone and reported back. */
-  app.post('/admin/blocks', admin, async (req, reply) => {
+  app.post('/admin/blocks', staff, async (req, reply) => {
     const input = parse(blockBody, req.body);
     const { rows } = await db.query(
       `INSERT INTO blocked_slots (slot_date, period, reason) VALUES ($1, $2, $3)
@@ -111,15 +188,15 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
     };
   });
 
-  app.delete('/admin/blocks/:id', admin, async (req) => {
+  app.delete('/admin/blocks/:id', staff, async (req) => {
     const { id } = req.params as { id: string };
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError('NOT_FOUND', 'Block not found.');
+    if (!isUuid(id)) throw new AppError('NOT_FOUND', 'Block not found.');
     const res = await db.query('DELETE FROM blocked_slots WHERE id = $1', [id]);
     if (!res.rowCount) throw new AppError('NOT_FOUND', 'Block not found.');
     return { ok: true };
   });
 
-  app.get('/admin/slot-periods', admin, async () => {
+  app.get('/admin/slot-periods', staff, async () => {
     const { periods } = await deps.settings.reload();
     return { periods };
   });
@@ -147,7 +224,7 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
     return { periods, updatedBookings: ids.length };
   });
 
-  app.get('/admin/jobs', admin, async (req) => {
+  app.get('/admin/jobs', staff, async (req) => {
     const status = (req.query as { status?: string }).status ?? 'failed';
     if (!['pending', 'running', 'done', 'failed'].includes(status)) throw new AppError('VALIDATION_FAILED', 'Unknown status.');
     const { rows } = await db.query(
@@ -158,11 +235,12 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
     return { jobs: rows };
   });
 
-  app.post('/admin/jobs/:id/retry', admin, async (req) => {
+  app.post('/admin/jobs/:id/retry', staff, async (req) => {
     const { id } = req.params as { id: string };
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError('NOT_FOUND', 'Job not found.');
+    if (!isUuid(id)) throw new AppError('NOT_FOUND', 'Job not found.');
+    // Reset and invite emails can't be retried: their one-time link was wiped when they failed.
     const res = await db.query(
-      "UPDATE jobs SET status = 'pending', attempts = 0, run_at = now(), locked_until = NULL WHERE id = $1 AND status = 'failed' AND kind <> 'auth.password_reset'",
+      "UPDATE jobs SET status = 'pending', attempts = 0, run_at = now(), locked_until = NULL WHERE id = $1 AND status = 'failed' AND kind NOT IN ('auth.password_reset', 'team.invite')",
       [id],
     );
     if (!res.rowCount) throw new AppError('NOT_FOUND', 'No failed job with that id can be retried.');
@@ -175,13 +253,21 @@ export async function adminRoutes(app: FastifyInstance, { deps }: { deps: Deps }
    * Returns { configured: false } until GA4_PROPERTY_ID and the service account are set up.
    */
   app.get('/admin/analytics', admin, async (req, reply) => {
-    const { range } = parse(analyticsQuery, req.query);
+    const { range, refresh } = parse(analyticsQuery, req.query);
+    if (refresh) clearAnalyticsCache();
     const since = new Date(Date.now() - range * 86_400_000);
     const { rows } = await db.query<{ n: number }>("SELECT count(*) AS n FROM bookings WHERE created_at >= $1 AND status <> 'cancelled'", [since]);
     const bookings = Number(rows[0].n);
     reply.header('Cache-Control', 'no-store');
     if (!isAnalyticsConfigured(config)) return { configured: false, rangeDays: range, bookings };
-    return { ...(await getAnalyticsSummary(config, range)), bookings };
+    return { ...(await getAnalyticsSummary(config, range)), bookings, measurementId: config.GA4_MEASUREMENT_ID ?? null };
+  });
+
+  /** "N people on the site right now" (Google refreshes this about once a minute). */
+  app.get('/admin/analytics/live', admin, async (_req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    if (!isAnalyticsConfigured(config)) return { configured: false, activeNow: 0 };
+    return { configured: true, activeNow: await getActiveNow(config).catch(() => 0) };
   });
 
   /**

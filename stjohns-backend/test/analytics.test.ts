@@ -53,6 +53,17 @@ describe('Google Analytics summary', () => {
     expect(summary.activeNow).toBe(4);
   });
 
+  it('counts channels beyond the top ones as "Other", so shares are of all visits', () => {
+    const totals = { rows: [row([], [90, 100, 300, 60])] };
+    const top = { rows: [row(['Organic Search'], [50]), row(['Direct'], [30])] };
+    const s = assembleSummary(3, '2026-10-03', [totals, {}, {}, top, {}], [], {});
+    expect(s.sources).toEqual([
+      { name: 'Organic Search', sessions: 50, share: 50 },
+      { name: 'Direct', sessions: 30, share: 30 },
+      { name: 'Other', sessions: 20, share: 20 },
+    ]);
+  });
+
   it('copes with an empty property (no data yet)', () => {
     const empty = assembleSummary(7, '2026-10-03', [], [], {});
     expect(empty.totals.visitors).toBe(0);

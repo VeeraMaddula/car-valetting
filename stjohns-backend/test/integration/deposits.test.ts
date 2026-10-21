@@ -1,5 +1,5 @@
-// End-to-end deposit flow against CockroachDB with a stubbed Stripe client.
-// Run: TEST_DATABASE_URL=postgresql://root@localhost:26257/defaultdb?sslmode=disable npm test
+// End-to-end deposit flow against real PostgreSQL (a Neon dev branch) with a stubbed Stripe client.
+// Run: put TEST_DATABASE_URL=<dev branch connection string> in .env, then npm test
 import pg from 'pg';
 import Stripe from 'stripe';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -13,9 +13,9 @@ import { hashPassword } from '../../src/domain/users.js';
 import { JobWorker } from '../../src/jobs/worker.js';
 import { addDays, todayInZone } from '../../src/lib/time.js';
 import { setStripeClientForTests } from '../../src/payments/stripe.js';
+import { createTestDatabase, TEST_DATABASE_URL, type TestDatabase } from './test-db.js';
 
-const BASE_URL = process.env.TEST_DATABASE_URL;
-const suite = BASE_URL ? describe : describe.skip;
+const suite = TEST_DATABASE_URL ? describe : describe.skip;
 const WHSEC = 'whsec_test_secret_0123456789';
 const SITE = 'http://localhost:5500';
 
@@ -54,9 +54,8 @@ function fakeStripe() {
   return fake;
 }
 
-suite('deposit payments on CockroachDB', () => {
-  const dbName = `sjp_dep_${Date.now()}`;
-  let root: pg.Pool;
+suite('deposit payments on PostgreSQL', () => {
+  let testDb: TestDatabase;
   let pool: pg.Pool;
   let app: Awaited<ReturnType<typeof buildApp>>;
   let deps: Deps;
@@ -92,13 +91,10 @@ suite('deposit payments on CockroachDB', () => {
   }
 
   beforeAll(async () => {
-    root = new pg.Pool({ connectionString: BASE_URL });
-    await root.query(`CREATE DATABASE ${dbName}`);
-    const url = new URL(BASE_URL!);
-    url.pathname = `/${dbName}`;
+    testDb = await createTestDatabase('sjp_deposits');
     const config = loadConfig({
       NODE_ENV: 'test',
-      DATABASE_URL: url.toString(),
+      DATABASE_URL: testDb.url,
       PUBLIC_SITE_URL: SITE,
       PUBLIC_API_URL: 'http://localhost:8080',
       ALLOWED_ORIGINS: SITE,
@@ -114,7 +110,7 @@ suite('deposit payments on CockroachDB', () => {
     setStripeClientForTests(stripe as unknown as Stripe);
     pool = createPool(config);
     await migrate(pool, () => undefined);
-    deps = { config, db: pool, settings: new SettingsCache(pool), wakeWorker: () => undefined };
+    deps = { config, db: pool, settings: new SettingsCache(pool, config), wakeWorker: () => undefined };
     app = await buildApp(deps, { logger: false, rateLimit: false });
     worker = new JobWorker(deps, { info() {}, warn() {}, error() {} });
 
@@ -136,8 +132,7 @@ suite('deposit payments on CockroachDB', () => {
     setStripeClientForTests(null);
     await app?.close();
     await pool?.end();
-    await root?.query(`DROP DATABASE IF EXISTS ${dbName} CASCADE`).catch(() => undefined);
-    await root?.end();
+    await testDb?.drop().catch(() => undefined);
   });
 
   const admin = () => ({ cookie: adminCookie, origin: SITE });

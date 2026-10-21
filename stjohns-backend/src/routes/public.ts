@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Deps } from '../deps.js';
 import { getAvailability, MAX_RANGE_DAYS } from '../domain/availability.js';
+import { checkDiscount } from '../domain/discounts.js';
+import { quoteService, SIZE_LABELS, toEur, VEHICLE_SIZES, type VehicleSize } from '../domain/pricing.js';
 import {
   bookingIcsEvent,
   cancelByCustomer,
@@ -36,10 +38,23 @@ export async function publicRoutes(app: FastifyInstance, { deps }: { deps: Deps 
 
   /** Everything the booking page needs to render before asking for availability. */
   app.get('/config', async (_req, reply) => {
-    const { services, periods } = await deps.settings.get();
-    reply.header('Cache-Control', 'public, max-age=300');
+    const { services, periods, addons, site } = await deps.settings.get();
+    const today = todayInZone(config.TIMEZONE);
+    const bySize = site.pricing.bySize;
+    const priced = (s: (typeof services)[number], size: VehicleSize | null) => {
+      const q = quoteService(s, size, bySize, today);
+      return { priceEur: toEur(q.listCents), salePriceEur: q.onSale ? toEur(q.priceCents) : null };
+    };
+    // Short cache so changes in the dashboard (pausing bookings, a new sale) reach customers within a minute.
+    reply.header('Cache-Control', 'public, max-age=60');
     return {
-      business: { name: config.BUSINESS_NAME, phone: config.BUSINESS_PHONE, address: config.BUSINESS_ADDRESS },
+      business: {
+        name: config.BUSINESS_NAME,
+        phone: config.BUSINESS_PHONE,
+        address: config.BUSINESS_ADDRESS,
+        email: site.business.publicEmail,
+        openingHours: site.business.openingHours,
+      },
       timezone: config.TIMEZONE,
       analytics: { measurementId: config.GA4_MEASUREMENT_ID ?? null },
       booking: {
@@ -48,10 +63,29 @@ export async function publicRoutes(app: FastifyInstance, { deps }: { deps: Deps 
         cancelCutoffHours: config.CANCEL_CUTOFF_HOURS,
         depositAmountEur: config.DEPOSIT_AMOUNT_EUR,
         onlineDeposit: config.stripeEnabled,
+        paused: site.booking.paused,
+        pausedMessage: site.booking.paused ? site.booking.pausedMessage : null,
+        pricesBySize: bySize,
+        vehicleSizes: bySize ? VEHICLE_SIZES.map((code) => ({ code, label: SIZE_LABELS[code] })) : [],
       },
       services: services
         .filter((s) => s.active)
-        .map((s) => ({ code: s.code, name: s.name, durationLabel: s.durationLabel, description: s.description, priceEur: s.priceCents === null ? null : s.priceCents / 100, priceFrom: s.priceFrom })),
+        .map((s) => {
+          const base = priced(s, null);
+          return {
+            code: s.code,
+            name: s.name,
+            durationLabel: s.durationLabel,
+            description: s.description,
+            featured: s.featured,
+            priceEur: base.priceEur,
+            priceFrom: s.priceFrom,
+            salePriceEur: base.salePriceEur,
+            saleEndsOn: base.salePriceEur !== null ? s.saleEndsOn : null,
+            prices: bySize ? Object.fromEntries(VEHICLE_SIZES.map((size) => [size, priced(s, size)])) : null,
+          };
+        }),
+      addons: addons.filter((a) => a.active).map((a) => ({ id: a.id, name: a.name, priceEur: a.priceCents / 100 })),
       periods: periods
         .filter((p) => p.active)
         .map((p) => ({ code: p.code, label: p.label, startTime: p.startTime?.slice(0, 5) ?? null, endTime: p.endTime?.slice(0, 5) ?? null, daysOfWeek: p.daysOfWeek })),
@@ -83,6 +117,12 @@ export async function publicRoutes(app: FastifyInstance, { deps }: { deps: Deps 
     });
     reply.status(created ? 201 : 200);
     return { booking: toCustomerView(config, booking) };
+  });
+
+  /** "Apply code" on the booking page: checks a discount code and returns the new total, without using it up. */
+  app.post('/discounts/check', perMinute(20), async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return checkDiscount(deps, req.body, req.user?.id ?? null);
   });
 
   /** Track any booking (guest or account) with its reference + the phone number used to book. */

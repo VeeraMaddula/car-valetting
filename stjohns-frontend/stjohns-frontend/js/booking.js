@@ -223,6 +223,8 @@ function selectDate(date) {
 }
 
 function selectSlot(period) {
+  // "Picked a slot" step of the admin analytics funnel (only sent once the visitor has allowed analytics).
+  if (state.period !== period) window.sjpTrack?.('select_slot', { slot_period: period });
   state.period = period;
   slotError.hidden = true;
   render();

@@ -3,7 +3,9 @@ import type { Deps } from '../deps.js';
 import {
   ACTIVE_STATUSES,
   bookingIcsEvent,
+  feedBookings,
   fetchBookingById,
+  timeLabel,
   type BookingRecord,
 } from '../domain/bookings.js';
 import { effectiveEnd, effectiveStart } from '../domain/settings.js';
@@ -11,11 +13,20 @@ import { PermanentProviderError } from '../lib/errors.js';
 import { buildIcs } from '../lib/ics.js';
 import { isMobileNumber, normalizePhone } from '../lib/phone.js';
 import { formatReference } from '../lib/reference.js';
-import { addDays } from '../lib/time.js';
+import { addDays, todayInZone, zonedTimeToUtc } from '../lib/time.js';
 import { isGoogleCalendarConfigured, upsertCalendarEvent, type CalendarEventBody } from '../notifications/gcal.js';
 import { sendEmail, type SendResult } from '../notifications/resend.js';
 import { sendSms } from '../notifications/sendmode.js';
-import { customerEmail, customerSms, ownerEmail, ownerSms, passwordResetEmail, type RenderedEmail } from '../notifications/templates.js';
+import {
+  customerEmail,
+  customerSms,
+  ownerDailySummaryEmail,
+  ownerEmail,
+  ownerSms,
+  passwordResetEmail,
+  teamInviteEmail,
+  type RenderedEmail,
+} from '../notifications/templates.js';
 import { createDepositLink, expireDepositLink, refundDepositForBooking } from '../domain/deposits.js';
 import type { JobInput, NotifyTemplate } from './queue.js';
 
@@ -45,8 +56,19 @@ const CLAIM_SQL = `
   )
   RETURNING id, kind, payload, attempts, max_attempts`;
 
-// Payloads holding secrets are wiped once the job finishes.
-const SCRUB = "payload = CASE WHEN kind = 'auth.password_reset' THEN '{}'::JSONB ELSE payload END";
+// Payloads holding secrets (reset and invite tokens) are wiped once the job finishes.
+const SCRUB = "payload = CASE WHEN kind IN ('auth.password_reset', 'team.invite') THEN '{}'::JSONB ELSE payload END";
+
+const siteUrl = (config: Config, path: string) => `${config.PUBLIC_SITE_URL.replace(/\/$/, '')}/${path}`;
+
+/** When the next 8am (business time zone) daily summary is due: today if it's before 8am, otherwise tomorrow. */
+export function nextDailySummary(timeZone: string, now = new Date()): { date: string; runAt: Date } {
+  const today = todayInZone(timeZone, now);
+  const todayAt = zonedTimeToUtc(today, '08:00', timeZone);
+  if (todayAt.getTime() > now.getTime()) return { date: today, runAt: todayAt };
+  const tomorrow = addDays(today, 1);
+  return { date: tomorrow, runAt: zonedTimeToUtc(tomorrow, '08:00', timeZone) };
+}
 
 const ACTIVE_ONLY: NotifyTemplate[] = ['created', 'confirmed', 'reminder', 'deposit_requested', 'deposit_paid'];
 
@@ -84,11 +106,18 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       const b = await fetchBookingById(db, bookingId);
       if (!b) return 'skipped: booking not found';
       if (ACTIVE_ONLY.includes(template) && !ACTIVE_STATUSES.includes(b.status)) return `skipped: booking is ${b.status}`;
+      // Owner switches are checked at send time too, so turning them off also stops messages already queued.
+      const { site } = await deps.settings.get();
+      if (template === 'reminder' && !site.messages.reminder) return 'skipped: reminders are turned off';
+      if (template === 'review_request') {
+        if (!site.messages.reviewRequest || !site.messages.googleReviewUrl) return 'skipped: review requests are turned off';
+        if (b.status !== 'completed') return `skipped: booking is ${b.status}`;
+      }
       switch (channel) {
         case 'customer_email': {
           if (!b.customerEmail) return 'skipped: no email';
           if (template === 'deposit_requested' && config.stripeEnabled && !b.depositPayUrl) return 'skipped: no payment link yet';
-          const email = customerEmail(template, b, config);
+          const email = customerEmail(template, b, config, { reviewUrl: site.messages.googleReviewUrl });
           if (!email) return 'skipped: no template';
           return describe(await sendEmail(config, { to: b.customerEmail, ...email, attachments: withCalendar(config, b, email) }, job.id));
         }
@@ -140,6 +169,41 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       const link = `${config.PUBLIC_SITE_URL.replace(/\/$/, '')}/reset-password.html?token=${encodeURIComponent(token)}`;
       return describe(await sendEmail(config, { to: rows[0].email, ...passwordResetEmail(config, rows[0].full_name, link) }, job.id));
     }
+    case 'owner.daily_summary': {
+      const { site } = await deps.settings.get();
+      if (!site.alerts.dailySummary) return 'skipped: daily summary is turned off';
+      if (!config.OWNER_EMAIL) return 'skipped: OWNER_EMAIL not set';
+      const date = String(job.payload.date);
+      const day = (await feedBookings(deps, date, date)).filter((b) => ACTIVE_STATUSES.includes(b.status));
+      const lines = day.map((b) => ({
+        period: `${b.periodLabel}${b.startTime ? ` ${timeLabel(b)}` : ''}`,
+        customer: b.customerName,
+        detail: `${b.serviceName} · ${b.vehicle}${b.status === 'pending' ? ' · awaiting confirmation' : ''}`,
+      }));
+      const { rows } = await db.query<{ pending: number; deposits: number }>(
+        `SELECT count(*) FILTER (WHERE status = 'pending') AS pending,
+                count(*) FILTER (WHERE deposit_status = 'requested' AND status IN ('pending', 'confirmed')) AS deposits
+         FROM bookings WHERE slot_date >= $1`,
+        [date],
+      );
+      const counts = { pending: Number(rows[0].pending), depositsOutstanding: Number(rows[0].deposits) };
+      const email = ownerDailySummaryEmail(config, date, lines, counts, siteUrl(config, 'admin.html'));
+      return describe(await sendEmail(config, { to: config.OWNER_EMAIL, ...email }, job.id));
+    }
+    case 'team.invite': {
+      const { inviteId, token } = job.payload as { inviteId: string; token: string };
+      const { rows } = await db.query<{ email: string; role: 'staff' | 'admin'; inviter: string | null; has_account: boolean }>(
+        `SELECT i.email, i.role, u.full_name AS inviter, EXISTS (SELECT 1 FROM users a WHERE a.email = i.email) AS has_account
+         FROM team_invites i LEFT JOIN users u ON u.id = i.invited_by
+         WHERE i.id = $1 AND i.accepted_at IS NULL AND i.expires_at > now()`,
+        [inviteId],
+      );
+      const invite = rows[0];
+      if (!invite || !token) return 'skipped: invite no longer open';
+      const link = siteUrl(config, `account.html?invite=${encodeURIComponent(token)}`);
+      const email = teamInviteEmail(config, invite.inviter ?? config.BUSINESS_NAME, invite.role, link, invite.has_account);
+      return describe(await sendEmail(config, { to: invite.email, ...email }, job.id));
+    }
     default:
       throw new PermanentProviderError(`unknown job kind ${String(job.kind)}`);
   }
@@ -160,6 +224,7 @@ export class JobWorker {
   private wakeRequested = false;
   private stopped = false;
   private lastHousekeeping = 0;
+  private lastSummaryCheck = 0;
 
   constructor(
     private readonly deps: Deps,
@@ -214,6 +279,7 @@ export class JobWorker {
     let processed = 0;
     try {
       processed = await this.processBatch();
+      await this.scheduleDailySummary();
       await this.housekeeping();
     } catch (err) {
       this.log.error({ err }, 'job worker tick failed');
@@ -247,7 +313,22 @@ export class JobWorker {
     }
   }
 
-  /** Hourly clean-up of finished jobs, expired sessions and used reset tokens. */
+  /** Keep the next 8am summary queued while the owner has it turned on (checked every 10 minutes, de-duplicated by date). */
+  private async scheduleDailySummary(): Promise<void> {
+    if (Date.now() - this.lastSummaryCheck < 10 * 60_000) return;
+    this.lastSummaryCheck = Date.now();
+    const { config, db } = this.deps;
+    const { site } = await this.deps.settings.get();
+    if (!site.alerts.dailySummary || !config.OWNER_EMAIL) return;
+    const { date, runAt } = nextDailySummary(config.TIMEZONE);
+    await db.query(
+      `INSERT INTO jobs (kind, payload, run_at, dedupe_key) VALUES ('owner.daily_summary', $1::JSONB, $2, $3)
+       ON CONFLICT (dedupe_key) DO NOTHING`,
+      [JSON.stringify({ date }), runAt, `daily-summary:${date}`],
+    );
+  }
+
+  /** Hourly clean-up of finished jobs, expired sessions, used reset tokens, abandoned photo uploads and old invites. */
   private async housekeeping(): Promise<void> {
     if (Date.now() - this.lastHousekeeping < 3_600_000) return;
     this.lastHousekeeping = Date.now();
@@ -257,5 +338,15 @@ export class JobWorker {
     await db.query(
       "DELETE FROM password_reset_tokens WHERE token_hash IN (SELECT token_hash FROM password_reset_tokens WHERE expires_at < now() - INTERVAL '1 day' LIMIT 1000)",
     );
+    // Photos uploaded but never added to the slideshow, gallery or a before/after pair.
+    await db.query(
+      `DELETE FROM images WHERE id IN (
+         SELECT i.id FROM images i
+         WHERE i.created_at < now() - INTERVAL '1 day'
+           AND NOT EXISTS (SELECT 1 FROM gallery_items g WHERE g.image_id = i.id)
+           AND NOT EXISTS (SELECT 1 FROM before_after p WHERE p.before_image_id = i.id OR p.after_image_id = i.id)
+         LIMIT 200)`,
+    );
+    await db.query("DELETE FROM team_invites WHERE id IN (SELECT id FROM team_invites WHERE expires_at < now() - INTERVAL '30 days' LIMIT 500)");
   }
 }

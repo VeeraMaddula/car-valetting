@@ -20,8 +20,12 @@ export function isMobileNumber(e164: string): boolean {
   return normalizePhone(e164)?.isMobile ?? false;
 }
 
+/** Stored in place of the phone number when a customer's personal data is erased (GDPR). */
+export const ERASED_PHONE = 'erased';
+
 /** '+353894709672' → '089 470 9672' for Irish numbers, international format otherwise. */
 export function displayPhone(e164: string): string {
+  if (e164 === ERASED_PHONE) return '—';
   const parsed = parsePhoneNumberFromString(e164);
   if (!parsed) return e164;
   return parsed.country === 'IE' ? parsed.formatNational() : parsed.formatInternational();

@@ -10,7 +10,8 @@ export type NotifyTemplate =
   | 'deposit_requested'
   | 'deposit_paid'
   | 'deposit_refunded'
-  | 'completed';
+  | 'completed'
+  | 'review_request';
 
 export type JobInput =
   | { kind: 'notify'; payload: { bookingId: string; channel: NotifyChannel; template: NotifyTemplate }; runAt?: Date }
@@ -18,7 +19,9 @@ export type JobInput =
   | { kind: 'auth.password_reset'; payload: { userId: string; token: string }; runAt?: Date }
   | { kind: 'deposit.link'; payload: { bookingId: string }; runAt?: Date }
   | { kind: 'deposit.expire'; payload: { bookingId: string; sessionId: string }; runAt?: Date }
-  | { kind: 'deposit.refund'; payload: { bookingId: string }; runAt?: Date };
+  | { kind: 'deposit.refund'; payload: { bookingId: string }; runAt?: Date }
+  | { kind: 'owner.daily_summary'; payload: { date: string }; runAt?: Date }
+  | { kind: 'team.invite'; payload: { inviteId: string; token: string }; runAt?: Date };
 
 export type JobKind = JobInput['kind'];
 

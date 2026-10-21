@@ -11,8 +11,12 @@ import type { Deps } from './deps.js';
 import { AppError } from './lib/errors.js';
 import { registerAuth } from './plugins/auth.js';
 import { accountRoutes } from './routes/account.js';
+import { catalogRoutes } from './routes/admin-catalog.js';
+import { customerRoutes } from './routes/admin-customers.js';
+import { siteRoutes } from './routes/admin-site.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { mediaRoutes } from './routes/media.js';
 import { publicRoutes } from './routes/public.js';
 import { webhookRoutes } from './routes/webhooks.js';
 
@@ -99,7 +103,11 @@ export async function buildApp(deps: Deps, opts: { logger?: FastifyServerOptions
       await api.register(authRoutes, { deps });
       await api.register(accountRoutes, { deps });
       await api.register(adminRoutes, { deps });
-      // Own plugin scope so its raw-body JSON parser doesn't affect the other routes.
+      await api.register(catalogRoutes, { deps });
+      await api.register(customerRoutes, { deps });
+      await api.register(siteRoutes, { deps });
+      // Own plugin scopes so their body parsers (raw JSON for Stripe, image files for uploads) don't affect other routes.
+      await api.register(mediaRoutes, { deps });
       await api.register(webhookRoutes, { deps });
     },
     { prefix: '/api/v1' },
