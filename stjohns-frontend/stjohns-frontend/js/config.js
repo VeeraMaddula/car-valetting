@@ -3,8 +3,13 @@
 // Live site: https://api.<your domain> (e.g. www.example.ie → api.example.ie). Override with window.SJP_API_BASE if needed.
 const host = location.hostname;
 const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '';
+// Temporary Render address until the .ie domain is live.
+const isRender = host.endsWith('.onrender.com');
 
-export const API_BASE = (window.SJP_API_BASE || (isLocal ? `http://${host || 'localhost'}:8080` : `https://api.${host.replace(/^www\./, '')}`)).replace(/\/$/, '');
+export const API_BASE = (
+  window.SJP_API_BASE ||
+  (isLocal ? `http://${host || 'localhost'}:8080` : isRender ? 'https://stjohnspark-api.onrender.com' : `https://api.${host.replace(/^www\./, '')}`)
+).replace(/\/$/, '');
 
 export const BUSINESS = {
   name: 'St Johns Park Car Valeting Service',
