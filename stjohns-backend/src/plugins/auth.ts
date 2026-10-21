@@ -56,8 +56,8 @@ export function requireStaff(req: FastifyRequest): SessionUser {
 export function setSessionCookie(reply: FastifyReply, config: Config, session: { token: string; expiresAt: Date }): void {
   reply.setCookie(SESSION_COOKIE, session.token, {
     httpOnly: true,
-    secure: config.isProduction,
-    sameSite: 'lax',
+    secure: config.isProduction || config.COOKIE_SAMESITE === 'none',
+    sameSite: config.COOKIE_SAMESITE,
     path: '/',
     domain: config.COOKIE_DOMAIN,
     expires: session.expiresAt,
@@ -65,5 +65,11 @@ export function setSessionCookie(reply: FastifyReply, config: Config, session: {
 }
 
 export function clearSessionCookie(reply: FastifyReply, config: Config): void {
-  reply.clearCookie(SESSION_COOKIE, { path: '/', domain: config.COOKIE_DOMAIN, secure: config.isProduction, sameSite: 'lax', httpOnly: true });
+  reply.clearCookie(SESSION_COOKIE, {
+    path: '/',
+    domain: config.COOKIE_DOMAIN,
+    secure: config.isProduction || config.COOKIE_SAMESITE === 'none',
+    sameSite: config.COOKIE_SAMESITE,
+    httpOnly: true,
+  });
 }

@@ -25,6 +25,9 @@ const schema = z.object({
   PUBLIC_API_URL: z.url(),
   ALLOWED_ORIGINS: z.string().default(''),
   COOKIE_DOMAIN: optionalString,
+  // 'lax' when the site and API share a registrable domain (www./api. of the .ie domain). 'none' only while they
+  // sit on different sites, e.g. two *.onrender.com hosts (a public-suffix domain), or browsers drop the cookie.
+  COOKIE_SAMESITE: z.enum(['lax', 'none']).default('lax'),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
 
   TIMEZONE: z.string().default('Europe/Dublin'),
