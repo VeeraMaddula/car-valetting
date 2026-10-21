@@ -70,6 +70,8 @@ const schema = z.object({
   }),
   // Hours a deposit link stays valid before Stripe expires it (min 0.5, max 24 per Stripe).
   DEPOSIT_LINK_HOURS: z.coerce.number().min(0.5).max(24).default(24),
+  // Staging only: lets a production build run against Stripe's sandbox. Must be unset on the live site.
+  STRIPE_ALLOW_TEST_KEY: flag(false),
 
   WORKER_ENABLED: flag(true),
 });
@@ -97,8 +99,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (cfg.STRIPE_SECRET_KEY && !cfg.STRIPE_WEBHOOK_SECRET) {
     throw new Error('Invalid environment configuration:\n  - STRIPE_WEBHOOK_SECRET: required when STRIPE_SECRET_KEY is set (deposits would never be marked paid)');
   }
-  if (cfg.STRIPE_SECRET_KEY && cfg.NODE_ENV === 'production' && cfg.STRIPE_SECRET_KEY.includes('_test_')) {
-    throw new Error('Invalid environment configuration:\n  - STRIPE_SECRET_KEY: a test key cannot be used in production');
+  if (cfg.STRIPE_SECRET_KEY && cfg.NODE_ENV === 'production' && cfg.STRIPE_SECRET_KEY.includes('_test_') && !cfg.STRIPE_ALLOW_TEST_KEY) {
+    throw new Error(
+      'Invalid environment configuration:\n  - STRIPE_SECRET_KEY: a test key cannot be used in production (set STRIPE_ALLOW_TEST_KEY=true on a staging deploy only)',
+    );
   }
   return {
     ...cfg,

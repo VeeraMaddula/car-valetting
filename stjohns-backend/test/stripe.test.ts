@@ -59,6 +59,8 @@ describe('Stripe configuration', () => {
 
   it('refuses a test key in production and a malformed key anywhere', () => {
     expect(() => loadConfig({ ...base, NODE_ENV: 'production', DATABASE_URL: 'postgresql://u:p@db.example.com/stjohns?sslmode=verify-full', STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: WHSEC })).toThrow(/test key/);
+    const staging = { ...base, NODE_ENV: 'production', DATABASE_URL: 'postgresql://u:p@db.example.com/stjohns?sslmode=verify-full', STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: WHSEC, STRIPE_ALLOW_TEST_KEY: 'true' };
+    expect(loadConfig(staging).stripeEnabled).toBe(true);
     expect(() => loadConfig({ ...base, STRIPE_SECRET_KEY: 'pk_live_abc', STRIPE_WEBHOOK_SECRET: WHSEC })).toThrow(/STRIPE_SECRET_KEY/);
     expect(() => loadConfig({ ...base, STRIPE_SECRET_KEY: 'sk_live_abc', STRIPE_WEBHOOK_SECRET: 'nope' })).toThrow(/STRIPE_WEBHOOK_SECRET/);
   });
