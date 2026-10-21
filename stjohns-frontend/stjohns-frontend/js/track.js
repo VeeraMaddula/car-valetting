@@ -100,7 +100,7 @@ function steps(b) {
   const depositSub = {
     paid: `${amount} received`,
     waived: 'Waived',
-    requested: `${amount} requested`,
+    requested: b.deposit.payUrl ? `${amount} due · pay online below` : `${amount} requested`,
     refunded: `${amount} refunded`,
   }[b.deposit.status] || `${amount} after confirmation`;
   const list = [
@@ -164,6 +164,19 @@ function renderResult() {
   renderChange();
 }
 
+/** "Pay deposit" while a live Stripe link exists; thanks once paid; a note if they came back from Stripe without paying. */
+function renderDeposit(b) {
+  const due = $('[data-deposit-due]');
+  const payUrl = b.deposit && b.deposit.payUrl;
+  due.hidden = !payUrl;
+  if (payUrl) {
+    $('[data-deposit-amount]').textContent = euro(b.deposit.amountEur);
+    $('[data-deposit-pay]').href = payUrl;
+  }
+  $('[data-deposit-thanks]').hidden = !(returnedFrom === 'paid' && b.deposit && b.deposit.status === 'paid');
+  $('[data-deposit-cancelled]').hidden = !(returnedFrom === 'cancelled' && Boolean(payUrl));
+}
+
 function renderChange() {
   const b = state.booking;
   let step = 'closed';
@@ -208,6 +221,7 @@ form.addEventListener('submit', async (e) => {
     show('result');
     history.replaceState(null, '', `?ref=${encodeURIComponent(booking.reference)}`);
     document.getElementById('result-ref').focus();
+    if (returnedFrom === 'paid' && booking.deposit && booking.deposit.status !== 'paid') pollForDeposit(reference, phone);
   } catch (err) {
     if (err.code === 'NOT_FOUND') {
       show('notfound');
@@ -220,6 +234,20 @@ form.addEventListener('submit', async (e) => {
     setBusy(submitBtn, false);
   }
 });
+
+/** Stripe's webhook usually lands within a second or two of the redirect; re-check a few times so the page catches up. */
+async function pollForDeposit(reference, phone, attempts = 6) {
+  for (let i = 0; i < attempts; i++) {
+    await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+    try {
+      const { booking } = await api.track(reference, phone);
+      if (!state.booking || state.booking.reference !== booking.reference) return;
+      state.booking = booking;
+      renderResult();
+      if (booking.deposit && booking.deposit.status === 'paid') return;
+    } catch { /* keep trying */ }
+  }
+}
 
 // ---------- Cancel ----------
 
@@ -268,7 +296,13 @@ $('[data-do-cancel]').addEventListener('click', async (e) => {
 
 // ---------- Start ----------
 
+const returnedFrom = param('deposit'); // 'paid' | 'cancelled' when Stripe sends the customer back
 const refParam = param('ref');
+if (returnedFrom) {
+  const clean = new URL(location.href);
+  clean.searchParams.delete('deposit');
+  history.replaceState(null, '', clean);
+}
 if (refParam) {
   form.elements.reference.value = normalizeRef(refParam) || refParam.slice(0, 40);
   form.elements.phone.focus();

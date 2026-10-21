@@ -38,6 +38,12 @@ export interface BookingRecord {
   collectionAddress: string | null;
   notes: string | null;
   depositStatus: DepositStatus;
+  depositSessionId: string | null;
+  depositPayUrl: string | null;
+  depositLinkExpiresAt: Date | null;
+  depositPaymentIntentId: string | null;
+  depositPaidAt: Date | null;
+  depositRefundId: string | null;
   calendarToken: string;
   sequence: number;
   googleEventId: string | null;
@@ -51,6 +57,8 @@ const SELECT_BOOKING = `
   SELECT b.id, b.reference, b.user_id, b.service_code, s.name AS service_name, b.slot_date, b.period,
          p.label AS period_label, p.start_time, p.end_time, b.status, b.customer_name, b.customer_phone,
          b.customer_email, b.vehicle, b.handover, b.collection_address, b.notes, b.deposit_status,
+         b.deposit_session_id, b.deposit_pay_url, b.deposit_link_expires_at, b.deposit_payment_intent_id,
+         b.deposit_paid_at, b.deposit_refund_id,
          b.calendar_token, b.sequence, b.google_event_id, b.cancelled_at, b.cancel_reason, b.created_at, b.updated_at
   FROM bookings b
   JOIN services s ON s.code = b.service_code
@@ -78,6 +86,12 @@ function mapRow(r: any): BookingRecord {
     collectionAddress: r.collection_address,
     notes: r.notes,
     depositStatus: r.deposit_status,
+    depositSessionId: r.deposit_session_id ?? null,
+    depositPayUrl: r.deposit_pay_url ?? null,
+    depositLinkExpiresAt: r.deposit_link_expires_at ?? null,
+    depositPaymentIntentId: r.deposit_payment_intent_id ?? null,
+    depositPaidAt: r.deposit_paid_at ?? null,
+    depositRefundId: r.deposit_refund_id ?? null,
     calendarToken: r.calendar_token,
     sequence: Number(r.sequence),
     googleEventId: r.google_event_id,
@@ -115,6 +129,8 @@ const EVENT_LABELS: Record<string, string> = {
   deposit_paid: 'Deposit received',
   deposit_refunded: 'Deposit refunded',
   deposit_waived: 'Deposit waived',
+  deposit_link_sent: 'Payment link sent',
+  deposit_failed: 'Payment did not go through',
   cancelled: 'Booking cancelled',
   completed: 'Valet completed',
   no_show: 'Marked as missed',
@@ -169,7 +185,16 @@ export interface ViewOptions {
   timeline?: TimelineEntry[];
 }
 
+/** The Checkout link, if the customer can still use it. */
+export function depositPayUrl(b: BookingRecord, now = new Date()): string | null {
+  if (b.depositStatus !== 'requested' || !b.depositPayUrl) return null;
+  if (!ACTIVE_STATUSES.includes(b.status)) return null;
+  if (b.depositLinkExpiresAt && b.depositLinkExpiresAt.getTime() <= now.getTime()) return null;
+  return b.depositPayUrl;
+}
+
 export function toCustomerView(config: Config, b: BookingRecord, opts: ViewOptions = {}) {
+  const now = new Date();
   const deadline = cancelDeadline(config, b);
   return {
     reference: formatReference(b.reference),
@@ -186,7 +211,13 @@ export function toCustomerView(config: Config, b: BookingRecord, opts: ViewOptio
     vehicle: b.vehicle,
     handover: b.handover,
     collectionAddress: opts.maskPhone ? null : b.collectionAddress,
-    deposit: { status: b.depositStatus, amountEur: config.DEPOSIT_AMOUNT_EUR },
+    deposit: {
+      status: b.depositStatus,
+      amountEur: config.DEPOSIT_AMOUNT_EUR,
+      // Only while the link is live and the booking is still active: the customer can pay online.
+      payUrl: depositPayUrl(b, now),
+      paidAt: b.depositPaidAt?.toISOString() ?? null,
+    },
     canCancel: canCustomerCancel(config, b),
     cancelDeadline: deadline.toISOString(),
     calendarUrl: b.status === 'cancelled' ? null : calendarUrl(config, b),
@@ -209,6 +240,10 @@ export function toAdminView(config: Config, b: BookingRecord) {
     userId: b.userId,
     cancelReason: b.cancelReason,
     googleEventId: b.googleEventId,
+    depositSessionId: b.depositSessionId,
+    depositPaymentIntentId: b.depositPaymentIntentId,
+    depositRefundId: b.depositRefundId,
+    depositLinkExpiresAt: b.depositLinkExpiresAt?.toISOString() ?? null,
     updatedAt: b.updatedAt.toISOString(),
   };
 }
@@ -278,6 +313,14 @@ function ownerJobs(config: Config, bookingId: string, template: NotifyTemplate):
 
 function calendarJobs(config: Config, bookingId: string): JobInput[] {
   return isGoogleCalendarConfigured(config) ? [{ kind: 'gcal.sync', payload: { bookingId } }] : [];
+}
+
+/** On cancellation: refund a paid deposit, or kill a live payment link so an old email can't be paid. */
+function depositJobsOnCancel(config: Config, b: BookingRecord): JobInput[] {
+  if (!config.stripeEnabled) return [];
+  if (b.depositStatus === 'paid' && b.depositPaymentIntentId) return [{ kind: 'deposit.refund', payload: { bookingId: b.id } }];
+  if (b.depositStatus === 'requested' && b.depositSessionId) return [{ kind: 'deposit.expire', payload: { bookingId: b.id, sessionId: b.depositSessionId } }];
+  return [];
 }
 
 /** 6pm the evening before the slot, unless that has already passed. */
@@ -474,6 +517,7 @@ export async function cancelByCustomer(deps: Deps, bookingId: string, reason: st
       ...customerJobs(b, 'cancelled'),
       ...ownerJobs(deps.config, b.id, 'cancelled_by_customer'),
       ...calendarJobs(deps.config, b.id),
+      ...depositJobsOnCancel(deps.config, b),
     ]);
   });
   deps.wakeWorker();
@@ -556,15 +600,26 @@ export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw
       statusChanged = true;
       events.push({ type: input.status, note: input.status === 'cancelled' ? input.note : null });
       if (input.status === 'confirmed') jobs.push(...customerJobs(b, 'confirmed'));
-      if (input.status === 'cancelled') jobs.push(...customerJobs(b, 'cancelled'));
+      if (input.status === 'cancelled') jobs.push(...customerJobs(b, 'cancelled'), ...depositJobsOnCancel(deps.config, b));
       if (input.status === 'completed' && b.customerEmail) {
         jobs.push({ kind: 'notify', payload: { bookingId: b.id, channel: 'customer_email', template: 'completed' } });
       }
       jobs.push(...calendarJobs(deps.config, b.id));
     }
     if (input.depositStatus && input.depositStatus !== b.depositStatus) {
+      if (input.depositStatus === 'refunded' && b.depositStatus !== 'paid') {
+        throw new AppError('INVALID_TRANSITION', 'Only a paid deposit can be refunded.');
+      }
       if (input.depositStatus !== 'not_requested') events.push({ type: `deposit_${input.depositStatus}`, note: null });
-      if (input.depositStatus === 'requested') jobs.push(...customerJobs(b, 'deposit_requested'));
+      if (input.depositStatus === 'requested') {
+        // With Stripe on, the worker creates the Checkout link first and then sends the "pay your deposit" messages.
+        // Without it, the messages go straight out with DEPOSIT_INSTRUCTIONS.
+        if (deps.config.stripeEnabled) jobs.push({ kind: 'deposit.link', payload: { bookingId: b.id } });
+        else jobs.push(...customerJobs(b, 'deposit_requested'));
+      }
+      if (input.depositStatus === 'refunded' && deps.config.stripeEnabled && b.depositPaymentIntentId) {
+        jobs.push({ kind: 'deposit.refund', payload: { bookingId: b.id } });
+      }
     }
     if (input.note && !(statusChanged && input.status === 'cancelled')) events.push({ type: 'note', note: input.note });
 

@@ -20,6 +20,9 @@ export interface ServiceDef {
   name: string;
   durationLabel: string | null;
   priceCents: number | null;
+  /** true = 'From €X' (varies by car size); false = fixed price. */
+  priceFrom: boolean;
+  description: string | null;
   active: boolean;
   sort: number;
 }
@@ -89,7 +92,7 @@ export class SettingsCache {
       this.db.query(
         'SELECT code, label, start_time, end_time, days_of_week, sort, active FROM slot_periods ORDER BY sort, code',
       ),
-      this.db.query('SELECT code, name, duration_label, price_cents, active, sort FROM services ORDER BY sort, code'),
+      this.db.query('SELECT code, name, duration_label, price_cents, price_from, description, active, sort FROM services ORDER BY sort, code'),
     ]);
     const value: Settings = {
       periods: periods.rows.map((r) => ({
@@ -106,6 +109,8 @@ export class SettingsCache {
         name: r.name,
         durationLabel: r.duration_label ?? null,
         priceCents: r.price_cents === null ? null : Number(r.price_cents),
+        priceFrom: r.price_from ?? true,
+        description: r.description ?? null,
         active: r.active,
         sort: Number(r.sort),
       })),

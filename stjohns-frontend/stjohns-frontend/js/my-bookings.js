@@ -111,7 +111,7 @@ function depositLabel(b) {
     case 'paid': return `${amount} paid`;
     case 'waived': return 'Waived';
     case 'refunded': return `${amount} refunded`;
-    case 'requested': return `${amount} requested`;
+    case 'requested': return b.deposit.payUrl ? `${amount} due · pay online` : `${amount} requested`;
     default: return ACTIVE.has(b.status) ? 'Requested after confirmation' : 'Not taken';
   }
 }
@@ -160,6 +160,10 @@ function renderNext(b) {
   const calendar = $('[data-next-calendar]');
   calendar.hidden = !b.calendarUrl;
   if (b.calendarUrl) calendar.href = b.calendarUrl;
+  const pay = $('[data-next-pay]');
+  const payUrl = b.deposit && b.deposit.payUrl;
+  pay.hidden = !payUrl;
+  if (payUrl) { pay.href = payUrl; pay.textContent = `Pay ${euro(b.deposit.amountEur)} deposit`; }
   $('[data-next-open]').dataset.ref = b.reference;
 }
 
@@ -187,6 +191,7 @@ function rowPanel(b, id, isOpen) {
   const active = ACTIVE.has(b.status);
   const facts = [['Vehicle', b.vehicle], ['Handover', handoverLabel(b)], ['Deposit', depositLabel(b)], ['Date', fmt.long(b.date)]];
   const actions = el('div', { class: 'row-actions' });
+  if (active && b.deposit && b.deposit.payUrl) actions.append(el('a', { class: 'btn btn-gold btn-sm', href: b.deposit.payUrl }, `Pay ${euro(b.deposit.amountEur)} deposit`));
   if (active && b.calendarUrl) actions.append(el('a', { class: 'btn btn-ghost btn-sm', href: b.calendarUrl }, 'Add to calendar'));
   if (b.canCancel && state.confirming === b.reference) {
     actions.append(

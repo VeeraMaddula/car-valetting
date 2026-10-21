@@ -1,6 +1,6 @@
 import type { Config } from '../config.js';
 import type { BookingRecord } from '../domain/bookings.js';
-import { calendarUrl, timeLabel, trackUrl, whenLabel } from '../domain/bookings.js';
+import { calendarUrl, depositPayUrl, timeLabel, trackUrl, whenLabel } from '../domain/bookings.js';
 import type { NotifyTemplate } from '../jobs/queue.js';
 import { displayPhone } from '../lib/phone.js';
 import { formatReference } from '../lib/reference.js';
@@ -178,18 +178,64 @@ export function customerEmail(template: NotifyTemplate, b: BookingRecord, config
           outro: [`Questions? Call ${config.BUSINESS_PHONE}.`],
         }),
       };
-    case 'deposit_requested':
+    case 'deposit_requested': {
+      const payUrl = depositPayUrl(b);
+      const amount = `€${config.DEPOSIT_AMOUNT_EUR}`;
       return {
-        subject: `Deposit request for your valet (${ref})`,
+        subject: `Pay your ${amount} deposit to secure your valet (${ref})`,
         attachCalendar: false,
         ...layout(config, {
-          preheader: `Secure ${whenLabel(b)} with a €${config.DEPOSIT_AMOUNT_EUR} deposit.`,
+          preheader: `Secure ${whenLabel(b)} with a ${amount} deposit.`,
           eyebrow: 'One last step',
-          heading: `Your €${config.DEPOSIT_AMOUNT_EUR} deposit`,
-          intro: [`To secure ${whenLabel(b)}, please pay the €${config.DEPOSIT_AMOUNT_EUR} deposit.`, config.DEPOSIT_INSTRUCTIONS],
+          heading: `Your ${amount} deposit`,
+          intro: payUrl
+            ? [
+                `To secure ${whenLabel(b)}, please pay the ${amount} deposit using the secure link below. It's deducted from the price on the day.`,
+                `Card, Apple Pay and Google Pay are accepted. The link is valid for ${Math.round(config.DEPOSIT_LINK_HOURS)} hours.`,
+              ]
+            : [`To secure ${whenLabel(b)}, please pay the ${amount} deposit.`, config.DEPOSIT_INSTRUCTIONS],
+          rows: bookingRows(b, config),
+          cta: payUrl ? { label: `Pay ${amount} deposit`, url: payUrl } : track,
+          secondary: payUrl ? track : undefined,
+          outro: help,
+        }),
+      };
+    }
+    case 'deposit_paid':
+      return {
+        subject: `Deposit received: thank you (${ref})`,
+        attachCalendar: false,
+        ...layout(config, {
+          preheader: `Your €${config.DEPOSIT_AMOUNT_EUR} deposit is in. See you ${whenLabel(b)}.`,
+          eyebrow: 'Deposit received',
+          heading: `Thanks, ${name}. Your slot is secured.`,
+          intro: [
+            `We've received your €${config.DEPOSIT_AMOUNT_EUR} deposit for ${whenLabel(b)}. It will be deducted from the price on the day.`,
+            'A receipt from our payment provider is on its way separately.',
+          ],
           rows: bookingRows(b, config),
           cta: track,
+          secondary: addToCalendar,
           outro: help,
+        }),
+      };
+    case 'deposit_refunded':
+      return {
+        subject: `Deposit refunded (${ref})`,
+        attachCalendar: false,
+        ...layout(config, {
+          preheader: `Your €${config.DEPOSIT_AMOUNT_EUR} deposit has been refunded.`,
+          eyebrow: 'Deposit refunded',
+          heading: 'Your deposit is on its way back.',
+          intro: [
+            `We've refunded your €${config.DEPOSIT_AMOUNT_EUR} deposit for booking ${ref}. Refunds usually show on your card within 5–10 working days.`,
+          ],
+          rows: [
+            ['Reference', ref],
+            ['Was booked for', whenLabel(b)],
+          ],
+          cta: { label: 'Book another slot', url: config.PUBLIC_SITE_URL },
+          outro: [`Questions? Call ${config.BUSINESS_PHONE}.`],
         }),
       };
     case 'completed':
@@ -236,6 +282,20 @@ export function ownerEmail(template: NotifyTemplate, b: BookingRecord, config: C
       }),
     };
   }
+  if (template === 'deposit_paid') {
+    return {
+      subject: `Deposit paid: ${shortDate(b.slotDate)} ${b.periodLabel}, ${b.customerName} (${ref})`,
+      attachCalendar: false,
+      ...layout(config, {
+        preheader: `€${config.DEPOSIT_AMOUNT_EUR} received for ${ref}`,
+        eyebrow: 'Deposit paid',
+        heading: `€${config.DEPOSIT_AMOUNT_EUR} received for ${shortDate(b.slotDate)}, ${b.periodLabel}`,
+        intro: [`${b.customerName} has paid the deposit online. Balance due on the day.`],
+        rows,
+        cta: call,
+      }),
+    };
+  }
   if (template === 'cancelled_by_customer') {
     return {
       subject: `Cancelled: ${shortDate(b.slotDate)} ${b.periodLabel}, ${b.customerName} (${ref})`,
@@ -271,8 +331,16 @@ export function customerSms(template: NotifyTemplate, b: BookingRecord, config: 
     case 'cancelled':
     case 'cancelled_by_customer':
       return `St Johns Park: booking ${ref} for ${shortDate(b.slotDate)} has been cancelled. Questions? ${config.BUSINESS_PHONE}`;
-    case 'deposit_requested':
-      return `St Johns Park: please pay the €${config.DEPOSIT_AMOUNT_EUR} deposit to secure ${slotShort(b)} (${ref}). ${config.DEPOSIT_INSTRUCTIONS}`;
+    case 'deposit_requested': {
+      const payUrl = depositPayUrl(b);
+      return payUrl
+        ? `St Johns Park: pay your €${config.DEPOSIT_AMOUNT_EUR} deposit to secure ${slotShort(b)} (${ref}): ${payUrl}`
+        : `St Johns Park: please pay the €${config.DEPOSIT_AMOUNT_EUR} deposit to secure ${slotShort(b)} (${ref}). ${config.DEPOSIT_INSTRUCTIONS}`;
+    }
+    case 'deposit_paid':
+      return `St Johns Park: €${config.DEPOSIT_AMOUNT_EUR} deposit received for ${slotShort(b)} (${ref}). Your slot is secured, thank you.`;
+    case 'deposit_refunded':
+      return `St Johns Park: your €${config.DEPOSIT_AMOUNT_EUR} deposit for ${ref} has been refunded. Allow 5–10 working days. Questions? ${config.BUSINESS_PHONE}`;
     case 'completed':
       return null;
   }
@@ -287,6 +355,9 @@ export function ownerSms(template: NotifyTemplate, b: BookingRecord): string | n
   }
   if (template === 'cancelled_by_customer') {
     return `Cancelled by customer: ${ref}, ${slotShort(b)}. ${b.customerName} ${displayPhone(b.customerPhone)}`;
+  }
+  if (template === 'deposit_paid') {
+    return `Deposit paid: ${ref}, ${slotShort(b)}. ${b.customerName}`;
   }
   return null;
 }

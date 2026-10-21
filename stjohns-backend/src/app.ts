@@ -14,6 +14,7 @@ import { accountRoutes } from './routes/account.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { publicRoutes } from './routes/public.js';
+import { webhookRoutes } from './routes/webhooks.js';
 
 function loggerOptions(config: Config): FastifyServerOptions['logger'] {
   const base = {
@@ -98,6 +99,8 @@ export async function buildApp(deps: Deps, opts: { logger?: FastifyServerOptions
       await api.register(authRoutes, { deps });
       await api.register(accountRoutes, { deps });
       await api.register(adminRoutes, { deps });
+      // Own plugin scope so its raw-body JSON parser doesn't affect the other routes.
+      await api.register(webhookRoutes, { deps });
     },
     { prefix: '/api/v1' },
   );

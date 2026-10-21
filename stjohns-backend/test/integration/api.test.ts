@@ -96,7 +96,9 @@ suite('booking API on CockroachDB', () => {
     expect(health.headers['server-timing']).toMatch(/^app;dur=/);
 
     const config = await call('GET', '/config');
-    expect(config.json.services.map((s: any) => s.code)).toEqual(['mini', 'full', 'wheel']);
+    expect(config.json.services.map((s: any) => s.code)).toEqual(['mini', 'standard', 'full', 'polish']);
+    expect(config.json.services.find((s: any) => s.code === 'mini')).toMatchObject({ priceEur: 50, priceFrom: false });
+    expect(config.json.services.find((s: any) => s.code === 'full')).toMatchObject({ priceEur: 130, priceFrom: true });
     expect(config.json.periods.map((p: any) => p.code)).toEqual(['morning', 'afternoon', 'evening']);
     expect(days.length).toBeGreaterThanOrEqual(5);
 

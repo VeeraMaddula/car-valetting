@@ -257,3 +257,9 @@
   .row-head .pill { grid-column: 2; grid-row: 2; justify-self: start; }
   .row-head .row-toggle { grid-column: 3; grid-row: 1 / span 2; }
 }
+
+/* ---------- Deposit (Stripe) ---------- */
+.deposit-notice { justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.deposit-notice .stack { flex: 1 1 320px; }
+.deposit-title { color: var(--gold-hi); font-weight: 500; letter-spacing: .02em; }
+.gap-6 { gap: 6px; }

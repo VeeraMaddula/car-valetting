@@ -21,7 +21,10 @@ export function createPool(config: Config): pg.Pool {
     connectionString: config.DATABASE_URL,
     max: config.DB_POOL_MAX,
     idleTimeoutMillis: 5 * 60_000,
-    connectionTimeoutMillis: 5_000,
+    // Cloud TLS handshakes can take a moment on a cold start.
+    connectionTimeoutMillis: 10_000,
+    // Recycle connections so they spread across CockroachDB nodes after scaling or upgrades.
+    maxLifetimeSeconds: 30 * 60,
     query_timeout: 15_000,
     keepAlive: true,
     application_name: 'stjohns-api',

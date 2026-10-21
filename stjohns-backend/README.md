@@ -3,7 +3,7 @@
 Backend for the St Johns Park Car Valeting website: three bookable slots a day (morning, afternoon, evening),
 guest or account bookings, tracking by reference, and notifications by email, SMS and calendar.
 
-**Stack:** Node.js 22 · TypeScript · Fastify · CockroachDB · Resend (email) · Sendmode (SMS) · Google Calendar.
+**Stack:** Node.js 22 · TypeScript · Fastify · PostgreSQL (Neon) · Resend (email) · Sendmode (SMS) · Google Calendar · Stripe (deposit).
 
 ## What it does
 
@@ -20,7 +20,10 @@ guest or account bookings, tracking by reference, and notifications by email, SM
   - the owner gets an email + SMS for every new booking or cancellation, a Google Calendar event per booking, and an
     iPhone/iCloud subscribed calendar of all bookings;
   - a reminder goes out at 6pm the evening before each slot.
-- **Owner tools (API):** confirm/cancel/complete bookings, request/record the €30 deposit, close a slot or a whole day,
+- **Deposit paid online (Stripe Checkout).** When the owner requests the deposit, the customer gets a secure Stripe link
+  by email and SMS (card, Apple Pay, Google Pay). Stripe's webhook marks the booking paid; a cancellation refunds it
+  automatically, and cancelling an unpaid booking kills the link. Without Stripe keys the old manual message is used.
+- **Owner tools (API):** confirm/cancel/complete bookings, request/record/refund the €30 deposit, close a slot or a whole day,
   set slot times and weekdays, see and retry failed notifications.
 
 ## Why it's fast
@@ -37,11 +40,11 @@ See [Choosing the region](#choosing-the-region).
 
 ## Local development
 
-Requirements: Node.js 22.9+, and Docker (or the CockroachDB binary).
+Requirements: Node.js 22.9+, and either Docker or a local PostgreSQL.
 
 ```bash
 cp .env.example .env
-docker compose up -d          # CockroachDB on localhost:26257 (console: http://localhost:8089)
+docker compose up -d          # CockroachDB on localhost:26257 (or point DATABASE_URL at any local PostgreSQL)
 npm install
 npm run migrate               # creates tables and seeds services + slots
 npm run dev                   # API on http://localhost:8080/api/v1
@@ -64,19 +67,30 @@ password reset and the notification worker.
 
 ## Production setup
 
-### 1. CockroachDB (database)
+### 1. Database (Neon PostgreSQL)
 
-1. Sign in at https://cockroachlabs.cloud and create a **Basic** cluster.
-2. Cloud provider **AWS**, region **eu-west-1 (Ireland)**, the closest to Waterford. If your API host has no Ireland
-   region, see [Choosing the region](#choosing-the-region).
-3. Create a SQL user and copy the connection string. Add a database name, e.g.
-   `postgresql://USER:PASSWORD@HOST:26257/stjohns?sslmode=verify-full`, and set it as `DATABASE_URL`.
-4. Create the database and tables:
-   ```bash
-   cockroach sql --url "<connection string with /defaultdb>" -e "CREATE DATABASE IF NOT EXISTS stjohns"
-   DATABASE_URL="<connection string with /stjohns>" npm run migrate
+The API runs on any PostgreSQL 14+ (Neon, Supabase, RDS, a VPS) and still on CockroachDB. Neon is the default:
+free tier, scales to zero when idle and wakes on the next connection, nothing to maintain.
+
+1. Sign in at https://neon.tech → **New project** → name `stjohns`, Postgres 17, region **AWS Europe (London) eu-west-2**
+   (closest to Waterford; Frankfurt is fine too).
+2. On the project page click **Connect** → copy the **pooled** connection string (host contains `-pooler`). Set it as
+   `DATABASE_URL`, keeping `?sslmode=verify-full` and dropping `&channel_binding=require`:
    ```
-   On deploy, run `node dist/db/migrate.js` as the release/pre-deploy command. It only applies new migrations.
+   postgresql://neondb_owner:npg_…@ep-…-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=verify-full
+   ```
+3. Create the tables, seed the packages and check the connection:
+   ```bash
+   npm run db:setup
+   ```
+   It creates the database if the role is allowed to (on Neon, `neondb` already exists), applies every pending migration
+   (`migrations/*.sql`, tracked in `schema_migrations`), then prints the server version, TLS mode, the active packages and
+   the round-trip time. Safe to run again at any time. On deploy, run `node dist/scripts/db-setup.js` (or
+   `node dist/db/migrate.js`) as the release/pre-deploy command.
+
+Packages and prices live in the `services` table (`003_packages.sql`): Mini Valet €50, Standard Valet from €90,
+Full Valet from €130, Machine Polishing from €150. Change them with SQL or, later, the admin UI; the website reads them
+from `GET /config`.
 
 ### 2. Host the API
 
@@ -85,12 +99,12 @@ Health check: `GET /api/v1/health`.
 
 #### Choosing the region
 
-| API host | Put the API in | CockroachDB region |
+| API host | Put the API in | Neon region |
 |---|---|---|
-| AWS (App Runner, ECS, Lightsail) | eu-west-1 Ireland | AWS eu-west-1 |
-| Google Cloud Run | europe-west2 London | GCP europe-west2 |
 | Render | Frankfurt | AWS eu-central-1 Frankfurt |
-| Railway / Fly.io | Amsterdam or London | nearest of the above |
+| Railway / Fly.io | London or Amsterdam | AWS eu-west-2 London |
+| AWS (App Runner, ECS, Lightsail) | eu-west-2 London | AWS eu-west-2 London |
+| Google Cloud Run | europe-west2 London | AWS eu-west-2 London |
 
 ### 3. Domain (GoDaddy)
 
@@ -105,9 +119,15 @@ Using one domain for both keeps the login cookie first-party, which Safari on iP
 
 ### 4. Resend (email)
 
-1. At https://resend.com add your domain, then add the DNS records it shows (SPF/MX and DKIM) in GoDaddy.
-2. Once verified, create an API key → `RESEND_API_KEY`.
-3. Set `EMAIL_FROM="St Johns Park Valeting <bookings@yourdomain.ie>"` and, optionally, `EMAIL_REPLY_TO`.
+1. **API keys** › create a key named `stjohns-api` with **Sending access** and paste it into `.env` as
+   `RESEND_API_KEY` (never in chat, screenshots or git; if one leaks, delete it and create another).
+2. Test right away: `npm run email:test` sends to `OWNER_EMAIL`. Until a domain is verified, Resend only delivers
+   to the address you signed up with, from `EMAIL_FROM="St Johns Park Valeting <onboarding@resend.dev>"`.
+3. **Domains** › add your domain, region **Ireland (eu-west-1)**, then add the DNS records it shows (DKIM `TXT`,
+   SPF `MX` + `TXT` on the `send` subdomain) in GoDaddy › DNS. Verification usually takes minutes.
+4. Once verified, set `EMAIL_FROM="St Johns Park Valeting <bookings@yourdomain.ie>"` and, optionally,
+   `EMAIL_REPLY_TO` (e.g. the owner's inbox, so customer replies reach a person), then run `npm run email:test` again.
+   You can now restrict the API key to that domain.
 
 ### 5. Sendmode (SMS)
 
@@ -154,11 +174,52 @@ to the owner's iPhone, they appear there too.
    traffic sources, devices, towns, top pages, people on the site right now, and bookings for the same period.
    Results are cached for 5 minutes to stay within Google's quotas.
 
-### 9. Owner account
+### 9. Stripe (deposit payments)
+
+1. Create the account at https://dashboard.stripe.com in the business's name (the owner should own it; payouts go to his bank).
+   Complete *Activate your account* (business details, bank account) before going live.
+2. **Developers › API keys** → copy the **Secret key** → `STRIPE_SECRET_KEY`. Use the `sk_test_…` key until launch.
+3. **Developers › Webhooks › Add endpoint** → URL `https://api.yourdomain.ie/api/v1/webhooks/stripe` → select the events
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+   `checkout.session.expired` and `charge.refunded` → copy the **Signing secret** → `STRIPE_WEBHOOK_SECRET`.
+4. **Settings › Payment methods**: cards are on by default; turn on Apple Pay / Google Pay (Checkout shows them automatically).
+   **Settings › Public details**: set the statement descriptor so the card statement reads e.g. `ST JOHNS PARK VALET`.
+5. Redeploy with both variables set. `GET /api/v1/config` now reports `booking.onlineDeposit: true` and the website shows
+   *Pay deposit* buttons on the tracking and My bookings pages.
+
+How it works: `PATCH /admin/bookings/:ref {depositStatus:"requested"}` queues a `deposit.link` job. The worker creates a
+Checkout Session (idempotent per booking), stores the URL, and only then queues the "pay your deposit" email + SMS. Stripe
+calls the webhook when the customer pays; the handler is idempotent on Stripe's event id, so retries never double-count.
+`PATCH … {depositStatus:"refunded"}` or any cancellation of a paid booking queues `deposit.refund`. A refund done in the Stripe
+dashboard is mirrored by the `charge.refunded` event. Money in/out is recorded in the `payments` table.
+
+Local testing with the Stripe CLI (https://docs.stripe.com/stripe-cli):
 
 ```bash
-ADMIN_PASSWORD='a long password' npm run create-admin -- --username owner --email you@yourdomain.ie --name "Your Name" --phone "089 470 9672"
+stripe login
+stripe listen --forward-to localhost:8080/api/v1/webhooks/stripe   # prints a whsec_… for STRIPE_WEBHOOK_SECRET
+# request a deposit through the admin API, open the link from the jobs table or the customer email,
+# pay with test card 4242 4242 4242 4242 (any future date, any CVC)
 ```
+
+The end-to-end suite covers the whole flow with a stubbed Stripe client and real signed webhooks (`test/integration/deposits.test.ts`).
+
+### 10. Owner account
+
+```bash
+npm run create-admin
+```
+
+It asks for a username, email, name, mobile number and password (hidden as you type, entered twice). Running it with
+an existing username makes that account an admin and optionally resets its password.
+
+On a server without a terminal, pass everything up front (the password only through the environment):
+
+```bash
+ADMIN_PASSWORD='a long password' node dist/scripts/create-admin.js --username owner --email you@yourdomain.ie --name "Your Name" --phone "089 470 9672"
+```
+
+In PowerShell, `npm run create-admin -- --flags` loses the `--`; use `npm.cmd run create-admin -- --flags` instead.
 
 ## API
 
@@ -185,7 +246,8 @@ Browsers must call with `credentials: 'include'` for accounts to work.
 | POST | `/me/bookings/:ref/cancel` | signed in | `{reason?}` |
 | POST | `/me/bookings/claim` | signed in | `{reference, phone}` adds a guest booking to the account |
 | GET | `/admin/bookings?from=&to=&status=` | admin | Bookings with full details |
-| GET/PATCH | `/admin/bookings/:ref` | admin | Details + history / `{status?, depositStatus?, note?}` |
+| GET/PATCH | `/admin/bookings/:ref` | admin | Details + history / `{status?, depositStatus?, note?}`. `depositStatus: requested` sends a Stripe link; `refunded` refunds a paid deposit |
+| POST | `/webhooks/stripe` | Stripe | Signed webhook: marks deposits paid/refunded, expires links |
 | GET/POST/DELETE | `/admin/blocks` | admin | Close a slot or day: `{date, period: all\|morning\|afternoon\|evening, reason?}` |
 | GET/PUT | `/admin/slot-periods/:code` | admin | `{label, startTime, endTime, daysOfWeek, active}` (times `HH:MM` or null) |
 | GET | `/admin/jobs?status=failed`, POST `/admin/jobs/:id/retry` | admin | Notification delivery problems |
@@ -202,6 +264,7 @@ Booking body: `{serviceCode: mini|full|wheel, date: YYYY-MM-DD, period, name, ph
   09:00 / 13:00 / 16:30 as start times.
 - Customers can cancel online until `CANCEL_CUTOFF_HOURS` (24) before the slot; after that they're asked to phone.
 - Status flow: `pending → confirmed → completed`, plus `cancelled` and `no_show`.
+- Deposit flow: `not_requested → requested → paid → refunded` (or `waived`). Deposit links expire after `DEPOSIT_LINK_HOURS` (24).
 
 ## Security notes
 

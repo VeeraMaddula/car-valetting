@@ -61,10 +61,20 @@ const schema = z.object({
     message: 'ADMIN_CALENDAR_FEED_KEY must be at least 24 characters',
   }),
 
+  // Stripe Checkout for the deposit. Leave both empty to keep the manual "we'll send you a link" flow.
+  STRIPE_SECRET_KEY: optionalString.refine((v) => v === undefined || /^(sk|rk)_(test|live)_/.test(v), {
+    message: 'STRIPE_SECRET_KEY looks like sk_test_… or sk_live_…',
+  }),
+  STRIPE_WEBHOOK_SECRET: optionalString.refine((v) => v === undefined || v.startsWith('whsec_'), {
+    message: 'STRIPE_WEBHOOK_SECRET looks like whsec_…',
+  }),
+  // Hours a deposit link stays valid before Stripe expires it (min 0.5, max 24 per Stripe).
+  DEPOSIT_LINK_HOURS: z.coerce.number().min(0.5).max(24).default(24),
+
   WORKER_ENABLED: flag(true),
 });
 
-export type Config = z.infer<typeof schema> & { allowedOrigins: string[]; isProduction: boolean };
+export type Config = z.infer<typeof schema> & { allowedOrigins: string[]; isProduction: boolean; stripeEnabled: boolean };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = schema.safeParse(env);
@@ -77,5 +87,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     .map((o) => o.trim().replace(/\/$/, ''))
     .filter(Boolean);
   if (allowedOrigins.length === 0) allowedOrigins.push(new URL(cfg.PUBLIC_SITE_URL).origin);
-  return { ...cfg, allowedOrigins, isProduction: cfg.NODE_ENV === 'production' };
+  if (cfg.NODE_ENV === 'production') {
+    // A production database must be encrypted and certificate-checked.
+    const sslmode = new URL(cfg.DATABASE_URL).searchParams.get('sslmode');
+    if (sslmode !== 'verify-full') {
+      throw new Error('Invalid environment configuration:\n  - DATABASE_URL: add ?sslmode=verify-full for production (Neon and Supabase connection strings support it)');
+    }
+  }
+  if (cfg.STRIPE_SECRET_KEY && !cfg.STRIPE_WEBHOOK_SECRET) {
+    throw new Error('Invalid environment configuration:\n  - STRIPE_WEBHOOK_SECRET: required when STRIPE_SECRET_KEY is set (deposits would never be marked paid)');
+  }
+  if (cfg.STRIPE_SECRET_KEY && cfg.NODE_ENV === 'production' && cfg.STRIPE_SECRET_KEY.includes('_test_')) {
+    throw new Error('Invalid environment configuration:\n  - STRIPE_SECRET_KEY: a test key cannot be used in production');
+  }
+  return {
+    ...cfg,
+    allowedOrigins,
+    isProduction: cfg.NODE_ENV === 'production',
+    stripeEnabled: Boolean(cfg.STRIPE_SECRET_KEY && cfg.STRIPE_WEBHOOK_SECRET && cfg.DEPOSIT_AMOUNT_EUR > 0),
+  };
 }

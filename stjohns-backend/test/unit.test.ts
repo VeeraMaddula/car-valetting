@@ -200,6 +200,12 @@ describe('notification templates', () => {
     collectionAddress: null,
     notes: null,
     depositStatus: 'not_requested',
+    depositSessionId: null,
+    depositPayUrl: null,
+    depositLinkExpiresAt: null,
+    depositPaymentIntentId: null,
+    depositPaidAt: null,
+    depositRefundId: null,
     calendarToken: 'tok',
     sequence: 0,
     googleEventId: null,
@@ -241,5 +247,15 @@ describe('infrastructure helpers', () => {
 
   it('rejects incomplete configuration with a readable message', () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
+  });
+
+  it('requires a certificate-checked database connection in production', () => {
+    const prod = { NODE_ENV: 'production', PUBLIC_SITE_URL: 'https://www.example.ie', PUBLIC_API_URL: 'https://api.example.ie' };
+    const host = 'postgresql://app:pw@stjohns-1234.j77.aws-eu-west-1.cockroachlabs.cloud:26257/stjohns';
+    expect(() => loadConfig({ ...prod, DATABASE_URL: host })).toThrow(/verify-full/);
+    expect(() => loadConfig({ ...prod, DATABASE_URL: `${host}?sslmode=require` })).toThrow(/verify-full/);
+    expect(loadConfig({ ...prod, DATABASE_URL: `${host}?sslmode=verify-full` }).isProduction).toBe(true);
+    // Local development may connect without TLS.
+    expect(loadConfig({ ...prod, NODE_ENV: 'development', DATABASE_URL: 'postgresql://root@localhost:26257/stjohns?sslmode=disable' }).isProduction).toBe(false);
   });
 });

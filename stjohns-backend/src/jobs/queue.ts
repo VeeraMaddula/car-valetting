@@ -8,12 +8,17 @@ export type NotifyTemplate =
   | 'cancelled_by_customer'
   | 'reminder'
   | 'deposit_requested'
+  | 'deposit_paid'
+  | 'deposit_refunded'
   | 'completed';
 
 export type JobInput =
   | { kind: 'notify'; payload: { bookingId: string; channel: NotifyChannel; template: NotifyTemplate }; runAt?: Date }
   | { kind: 'gcal.sync'; payload: { bookingId: string }; runAt?: Date }
-  | { kind: 'auth.password_reset'; payload: { userId: string; token: string }; runAt?: Date };
+  | { kind: 'auth.password_reset'; payload: { userId: string; token: string }; runAt?: Date }
+  | { kind: 'deposit.link'; payload: { bookingId: string }; runAt?: Date }
+  | { kind: 'deposit.expire'; payload: { bookingId: string; sessionId: string }; runAt?: Date }
+  | { kind: 'deposit.refund'; payload: { bookingId: string }; runAt?: Date };
 
 export type JobKind = JobInput['kind'];
 

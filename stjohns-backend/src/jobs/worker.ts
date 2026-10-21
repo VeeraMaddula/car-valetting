@@ -16,6 +16,7 @@ import { isGoogleCalendarConfigured, upsertCalendarEvent, type CalendarEventBody
 import { sendEmail, type SendResult } from '../notifications/resend.js';
 import { sendSms } from '../notifications/sendmode.js';
 import { customerEmail, customerSms, ownerEmail, ownerSms, passwordResetEmail, type RenderedEmail } from '../notifications/templates.js';
+import { createDepositLink, expireDepositLink, refundDepositForBooking } from '../domain/deposits.js';
 import type { JobInput, NotifyTemplate } from './queue.js';
 
 interface ClaimedJob {
@@ -47,7 +48,7 @@ const CLAIM_SQL = `
 // Payloads holding secrets are wiped once the job finishes.
 const SCRUB = "payload = CASE WHEN kind = 'auth.password_reset' THEN '{}'::JSONB ELSE payload END";
 
-const ACTIVE_ONLY: NotifyTemplate[] = ['created', 'confirmed', 'reminder', 'deposit_requested'];
+const ACTIVE_ONLY: NotifyTemplate[] = ['created', 'confirmed', 'reminder', 'deposit_requested', 'deposit_paid'];
 
 function describe(result: SendResult): string {
   return result.sent ? `sent ${result.id}` : `skipped: ${result.reason}`;
@@ -86,11 +87,13 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       switch (channel) {
         case 'customer_email': {
           if (!b.customerEmail) return 'skipped: no email';
+          if (template === 'deposit_requested' && config.stripeEnabled && !b.depositPayUrl) return 'skipped: no payment link yet';
           const email = customerEmail(template, b, config);
           if (!email) return 'skipped: no template';
           return describe(await sendEmail(config, { to: b.customerEmail, ...email, attachments: withCalendar(config, b, email) }, job.id));
         }
         case 'customer_sms': {
+          if (template === 'deposit_requested' && config.stripeEnabled && !b.depositPayUrl) return 'skipped: no payment link yet';
           const text = customerSms(template, b, config);
           if (!text) return 'skipped: no template';
           if (!isMobileNumber(b.customerPhone)) return 'skipped: not a mobile number';
@@ -121,6 +124,15 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       if (b.googleEventId !== eventId) await db.query('UPDATE bookings SET google_event_id = $2 WHERE id = $1', [b.id, eventId]);
       return `synced ${eventId}`;
     }
+    case 'deposit.link':
+      if (!config.stripeEnabled) return 'skipped: Stripe not configured';
+      return createDepositLink(deps, job.payload.bookingId);
+    case 'deposit.expire':
+      if (!config.stripeEnabled) return 'skipped: Stripe not configured';
+      return expireDepositLink(deps, job.payload.bookingId, job.payload.sessionId);
+    case 'deposit.refund':
+      if (!config.stripeEnabled) return 'skipped: Stripe not configured';
+      return refundDepositForBooking(deps, job.payload.bookingId);
     case 'auth.password_reset': {
       const { userId, token } = job.payload as { userId: string; token: string };
       const { rows } = await db.query<{ email: string; full_name: string }>('SELECT email, full_name FROM users WHERE id = $1', [userId]);

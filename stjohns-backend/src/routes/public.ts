@@ -47,10 +47,11 @@ export async function publicRoutes(app: FastifyInstance, { deps }: { deps: Deps 
         minLeadMinutes: config.BOOKING_MIN_LEAD_MINUTES,
         cancelCutoffHours: config.CANCEL_CUTOFF_HOURS,
         depositAmountEur: config.DEPOSIT_AMOUNT_EUR,
+        onlineDeposit: config.stripeEnabled,
       },
       services: services
         .filter((s) => s.active)
-        .map((s) => ({ code: s.code, name: s.name, durationLabel: s.durationLabel, priceEur: s.priceCents === null ? null : s.priceCents / 100 })),
+        .map((s) => ({ code: s.code, name: s.name, durationLabel: s.durationLabel, description: s.description, priceEur: s.priceCents === null ? null : s.priceCents / 100, priceFrom: s.priceFrom })),
       periods: periods
         .filter((p) => p.active)
         .map((p) => ({ code: p.code, label: p.label, startTime: p.startTime?.slice(0, 5) ?? null, endTime: p.endTime?.slice(0, 5) ?? null, daysOfWeek: p.daysOfWeek })),

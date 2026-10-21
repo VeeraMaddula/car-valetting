@@ -103,6 +103,15 @@
           <span class="pill pill-lg" data-status></span>
         </div>
         <ol class="steps-track" aria-label="Progress" data-steps></ol>
+        <div class="notice notice-gold deposit-notice" role="status" data-deposit-due hidden>
+          <div class="stack gap-6">
+            <strong class="deposit-title">Deposit due: <span data-deposit-amount></span></strong>
+            <span>Pay it online to secure your slot. Card, Apple Pay and Google Pay accepted. It's deducted from the price on the day.</span>
+          </div>
+          <a class="btn btn-gold btn-sm" href="#" data-deposit-pay>Pay deposit</a>
+        </div>
+        <p class="notice notice-ok" role="status" data-deposit-thanks hidden>Thanks, your deposit has been received and your slot is secured.</p>
+        <p class="notice" role="status" data-deposit-cancelled hidden>You left the payment page before paying. Your slot is still held for now; use the button above when you're ready.</p>
         <p class="notice" data-cancelled-note hidden>This booking was cancelled and the slot has been released. We've sent a confirmation by text and email.</p>
         <dl class="facts" data-details></dl>
       </section>
