@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: http://localhost:8080 http://127.0.0.1:8080; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Gallery · St Johns Park Car Valeting · Waterford</title>
 <meta name="description" content="See the finish behind every St Johns Park valet — exterior, detail and wheel work up close. Premium hand car valeting in Waterford.">
@@ -67,6 +67,7 @@
       <div class="g-filters" role="group" aria-label="Filter photos by category">
         <button class="g-chip" type="button" data-filter="all" aria-pressed="true">All<span class="count" data-count>15</span></button>
         <button class="g-chip" type="button" data-filter="exterior" data-label="exterior" aria-pressed="false">Exterior<span class="count" data-count>7</span></button>
+        <button class="g-chip" type="button" data-filter="interior" data-label="interior" aria-pressed="false" hidden>Interior<span class="count" data-count>0</span></button>
         <button class="g-chip" type="button" data-filter="detail" data-label="detail" aria-pressed="false">Detail<span class="count" data-count>4</span></button>
         <button class="g-chip" type="button" data-filter="wheels" data-label="wheel" aria-pressed="false">Wheels<span class="count" data-count>4</span></button>
       </div>
@@ -166,7 +167,7 @@
       </li>
     </ul>
 
-    <p class="small g-note">Photos show the kind of finish we work to. We're adding St Johns Park's own customer before-and-after sets as jobs are photographed.</p>
+    <p class="small g-note" data-g-note>Photos show the kind of finish we work to. We're adding St Johns Park's own customer before-and-after sets as jobs are photographed.</p>
   </div>
 </section>
 

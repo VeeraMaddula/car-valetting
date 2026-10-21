@@ -12,7 +12,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, headers = {}, timeout = 12000 } = {}) {
+/**
+ * `raw: true` sends `body` as-is (a File, with its own Content-Type header) instead of JSON;
+ * `blob: true` returns the response as a Blob (file downloads) instead of parsed JSON.
+ */
+export async function request(method, path, { body, headers = {}, timeout = 12000, raw = false, blob = false } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   let res;
@@ -20,8 +24,8 @@ async function request(method, path, { body, headers = {}, timeout = 12000 } = {
     res = await fetch(`${API_BASE}/api/v1${path}`, {
       method,
       credentials: 'include',
-      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: { ...(body !== undefined && !raw ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
       signal: controller.signal,
     });
   } catch (err) {
@@ -31,6 +35,7 @@ async function request(method, path, { body, headers = {}, timeout = 12000 } = {
   } finally {
     clearTimeout(timer);
   }
+  if (blob && res.ok) return res.blob();
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const e = data && data.error;
@@ -74,4 +79,11 @@ export const api = {
   myBooking: (reference) => request('GET', `/me/bookings/${encodeURIComponent(reference)}`),
   cancelMine: (reference, reason) => request('POST', `/me/bookings/${encodeURIComponent(reference)}/cancel`, { body: { reason: reason || null } }),
   claim: (reference, phone) => request('POST', '/me/bookings/claim', { body: { reference, phone } }),
+
+  /** Slideshow, gallery photos and the published before & after pair, as managed in the dashboard. */
+  gallery: () => request('GET', '/gallery', { timeout: 6000 }),
+  /** Preview a discount code on the booking page (doesn't use it up). */
+  checkDiscount: (code, serviceCode, vehicleSize) => request('POST', '/discounts/check', { body: { code, serviceCode, vehicleSize: vehicleSize || null } }),
+  /** A signed-in account accepts a team invite sent to its own email address. */
+  acceptInvite: (token) => request('POST', '/auth/invites/accept', { body: { token } }),
 };

@@ -75,6 +75,12 @@
       <button class="btn btn-text btn-sm" type="button" data-load-retry>Try again</button>
     </div>
 
+    <div class="notice notice-gold bk-paused" role="status" data-paused hidden>
+      <p class="bk-paused-title">Online booking is paused</p>
+      <p data-paused-text></p>
+      <a class="btn btn-gold btn-sm" href="tel:+353894709672" data-paused-call>Call 089 470 9672</a>
+    </div>
+
     <form class="bk-steps" id="booking-form" novalidate>
 
       <section class="card bk-step" aria-labelledby="bk-s1">
@@ -85,6 +91,18 @@
         <div class="bk-options bk-services" role="group" aria-labelledby="bk-s1" data-services>
           <p class="small muted">Loading services…</p>
         </div>
+        <div class="field bk-sizes" data-sizes-wrap hidden>
+          <p class="bk-field-label" id="bk-size-label">Vehicle size</p>
+          <div class="bk-options bk-size-options" role="group" aria-labelledby="bk-size-label" data-sizes></div>
+          <input type="hidden" name="vehicleSize" value="">
+          <span class="error" id="bk-size-error"></span>
+        </div>
+        <fieldset class="field bk-extras" data-extras-wrap hidden>
+          <legend class="bk-field-label">Extras (optional)</legend>
+          <div class="bk-extras-list" data-extras></div>
+          <input type="hidden" name="addons" value="">
+          <span class="error" id="bk-extras-error"></span>
+        </fieldset>
       </section>
 
       <section class="card bk-step" aria-labelledby="bk-s2" data-step-dates>
@@ -186,6 +204,16 @@
           <textarea id="bk-notes" name="notes" rows="3" maxlength="1000" placeholder="Pet hair, child seats, anything we should know" aria-describedby="bk-notes-error"></textarea>
           <span class="error" id="bk-notes-error"></span>
         </div>
+
+        <div class="field bk-discount">
+          <label for="bk-discount">Discount code (optional)</label>
+          <div class="bk-discount-row">
+            <input id="bk-discount" name="discountCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="30" aria-describedby="bk-discount-status bk-discount-error">
+            <button class="btn btn-ghost btn-sm" type="button" data-discount-apply>Apply</button>
+          </div>
+          <span class="bk-discount-status" id="bk-discount-status" aria-live="polite" data-discount-status></span>
+          <span class="error" id="bk-discount-error"></span>
+        </div>
       </section>
 
     </form>
@@ -232,6 +260,12 @@
         <div><dt>Slot</dt><dd class="is-empty" data-sum-slot>Not selected</dd></div>
         <div><dt>Handover</dt><dd data-sum-handover>Drop off at St Johns Park</dd></div>
       </dl>
+      <div class="bk-price" data-price hidden>
+        <div class="bk-sum-rule" aria-hidden="true"></div>
+        <dl class="bk-price-list" data-price-list></dl>
+        <p class="bk-price-total"><span class="label" data-price-total-label>Total</span><span class="bk-price-amount" data-price-total></span></p>
+        <p class="small muted" data-price-note hidden>Final price confirmed when we see the car.</p>
+      </div>
       <div class="bk-deposit-wrap" data-deposit-wrap>
         <div class="bk-sum-rule" aria-hidden="true"></div>
         <p class="bk-deposit"><span class="label">Deposit</span><span class="bk-deposit-amount" data-deposit>€30</span></p>

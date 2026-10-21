@@ -51,6 +51,10 @@
 
   <div class="auth-col">
 
+    <div class="notice notice-gold" role="status" data-invite hidden>
+      <p><strong>You've been invited to join the St Johns Park team.</strong> Create an account with the email address the invite was sent to, or sign in if you already have one.</p>
+    </div>
+
     <div class="tabs" role="tablist" aria-label="Account">
       <button class="tab" type="button" role="tab" id="tab-signin" aria-controls="panel-signin" aria-selected="true" data-tab="signin">Sign in</button>
       <button class="tab" type="button" role="tab" id="tab-register" aria-controls="panel-register" aria-selected="false" tabindex="-1" data-tab="register">Create account</button>
@@ -161,6 +165,17 @@
         <a class="btn btn-ghost" href="booking.html">Book a valet</a>
       </div>
       <button class="text-btn" type="button" data-sign-out>Not you? Sign out</button>
+    </section>
+
+    <section class="auth-state card-featured" data-view="invite" aria-labelledby="invite-title" hidden>
+      <span class="state-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg></span>
+      <h1 class="auth-title" id="invite-title" tabindex="-1">Join the team</h1>
+      <p data-invite-text>Accept the invite to open the St Johns Park dashboard.</p>
+      <p class="notice notice-error form-notice" role="alert" data-invite-error></p>
+      <div class="auth-state-actions">
+        <button class="btn btn-gold" type="button" data-invite-accept>Accept invite</button>
+      </div>
+      <button class="text-btn" type="button" data-invite-sign-out>Use a different account</button>
     </section>
 
     <div class="auth-guest" data-guest>

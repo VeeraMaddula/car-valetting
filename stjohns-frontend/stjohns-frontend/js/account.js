@@ -24,6 +24,12 @@ function safeNext(raw) {
   }
 }
 const next = safeNext(param('next'));
+const DASHBOARD = 'admin.html';
+// account.html?invite=… comes from a team invite email.
+const inviteToken = /^[A-Za-z0-9_-]{20,100}$/.test(param('invite') || '') ? param('invite') : null;
+const inviteNotice = document.querySelector('[data-invite]');
+/** Where to go after signing in: team members land on the dashboard unless a page asked for them. */
+const afterSignIn = (user) => (user && user.role !== 'customer' && next === DEFAULT_NEXT ? DASHBOARD : next);
 
 function firstName(user) {
   return (user.fullName || '').trim().split(/\s+/)[0] || user.username;
@@ -56,7 +62,8 @@ function go(view, { focus = 'heading' } = {}) {
   views.forEach((v) => { v.hidden = v.dataset.view !== view; });
   const tabbed = view === 'signin' || view === 'register';
   tablist.hidden = !tabbed;
-  guest.hidden = !tabbed;
+  guest.hidden = !tabbed || Boolean(inviteToken);
+  inviteNotice.hidden = !(tabbed && inviteToken);
   tabs.forEach((t) => {
     const on = t.dataset.tab === view;
     t.setAttribute('aria-selected', String(on));
@@ -143,8 +150,19 @@ forms.signin.addEventListener('submit', (e) => {
   setFormError(form, '');
   if (showFieldErrors(form, errors)) return;
   run(form, async () => {
-    await api.login(login, password);
-    location.assign(next);
+    const { user } = await api.login(login, password);
+    if (inviteToken) {
+      // Signed in now either way; if the invite can't be used, the invite view explains why.
+      try {
+        await api.acceptInvite(inviteToken);
+      } catch (err) {
+        showInvite(user, err.message);
+        return false;
+      }
+      location.assign(DASHBOARD);
+      return true;
+    }
+    location.assign(afterSignIn(user));
     return true;
   }, (err) => {
     if (err.code !== 'UNAUTHENTICATED') return false;
@@ -167,6 +185,7 @@ forms.register.addEventListener('submit', (e) => {
     email: form.elements.email.value.trim(),
     phone: form.elements.phone.value.trim(),
     password: form.elements.password.value,
+    ...(inviteToken ? { inviteToken } : {}),
   };
   const errors = {};
   if (body.fullName.length < 2) errors.fullName = 'Enter your name';
@@ -179,7 +198,7 @@ forms.register.addEventListener('submit', (e) => {
   if (showFieldErrors(form, errors)) return;
   run(form, async () => {
     await api.register(body);
-    location.assign(next);
+    location.assign(inviteToken ? DASHBOARD : next);
     return true;
   }, (err) => {
     // "Already registered" is terse on its own; the full message points to signing in.
@@ -210,8 +229,9 @@ function showSignedIn(user) {
   const name = firstName(user);
   document.querySelector('[data-done-text]').textContent = `Good to see you again, ${name}. Your bookings are waiting.`;
   const nextLink = document.querySelector('[data-done-next]');
-  nextLink.href = next;
-  nextLink.textContent = next === DEFAULT_NEXT ? 'My bookings' : 'Continue';
+  const target = afterSignIn(user);
+  nextLink.href = target;
+  nextLink.textContent = target === DASHBOARD ? 'Open dashboard' : target === DEFAULT_NEXT ? 'My bookings' : 'Continue';
   document.querySelector('[data-sign-out]').textContent = `Not ${name}? Sign out`;
   document.title = 'Signed in · St Johns Park Car Valeting';
   go('done', { focus: false });
@@ -232,14 +252,59 @@ document.querySelector('[data-sign-out]').addEventListener('click', async (e) =>
   }
 });
 
+// ---------- Team invite (already signed in) ----------
+
+const inviteError = document.querySelector('[data-invite-error]');
+
+function showInvite(user, error = '') {
+  document.querySelector('[data-invite-text]').textContent = `You're signed in as ${firstName(user)} (${user.email}). Accept the invite to open the St Johns Park dashboard.`;
+  inviteError.textContent = error;
+  document.title = 'Join the team · St Johns Park Car Valeting';
+  go('invite', { focus: error ? 'heading' : false });
+}
+
+document.querySelector('[data-invite-accept]').addEventListener('click', async (e) => {
+  const button = e.currentTarget;
+  if (isBusy(button)) return;
+  setBusy(button, true);
+  inviteError.textContent = '';
+  try {
+    await api.acceptInvite(inviteToken);
+    location.assign(DASHBOARD);
+  } catch (err) {
+    // FORBIDDEN: the invite was sent to a different email; VALIDATION_FAILED: expired or already used.
+    inviteError.textContent = err.message;
+    setBusy(button, false);
+  }
+});
+
+document.querySelector('[data-invite-sign-out]').addEventListener('click', async (e) => {
+  const button = e.currentTarget;
+  if (isBusy(button)) return;
+  setBusy(button, true);
+  try {
+    await api.logout();
+    go('signin');
+  } catch (err) {
+    toast(err.message, { error: true });
+  } finally {
+    setBusy(button, false);
+  }
+});
+
 // ---------- Start ----------
 
 const modes = { register: 'register', forgot: 'forgot' };
-const initialView = modes[param('mode')] || 'signin';
+// New team members usually don't have an account yet.
+const initialView = modes[param('mode')] || (inviteToken ? 'register' : 'signin');
 go(initialView, { focus: false });
 
 currentUser().then((user) => {
   if (!user) return;
+  if (inviteToken) {
+    showInvite(user);
+    return;
+  }
   // "Change password" from My bookings lands here: keep the reset form and fill in their email.
   if (initialView === 'forgot') {
     const email = forms.forgot.elements.email;

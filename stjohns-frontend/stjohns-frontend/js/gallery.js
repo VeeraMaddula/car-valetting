@@ -1,9 +1,11 @@
 // Gallery page: category filters and a photo lightbox built on the native <dialog>.
 // Tiles are plain links to the full-size photo, so the page still works if this script fails to load.
-import './ui.js';
+// Photos uploaded in the dashboard (GET /gallery) replace the built-in ones once they arrive.
+import { api } from './api.js';
+import { el } from './ui.js';
 
 const grid = document.querySelector('[data-grid]');
-const items = [...grid.querySelectorAll('.g-item')];
+let items = [...grid.querySelectorAll('.g-item')];
 const chips = [...document.querySelectorAll('[data-filter]')];
 const status = document.querySelector('[data-status]');
 const filters = new Set(chips.map((chip) => chip.dataset.filter));
@@ -12,10 +14,16 @@ const filters = new Set(chips.map((chip) => chip.dataset.filter));
 const matches = (item, filter) => filter === 'all' || item.dataset.category === filter;
 const visibleItems = () => items.filter((item) => !item.hidden);
 
-chips.forEach((chip) => {
-  const count = chip.querySelector('[data-count]');
-  if (count) count.textContent = String(items.filter((item) => matches(item, chip.dataset.filter)).length);
-});
+/** Count per chip; categories with no photos hide their chip. */
+function recount() {
+  chips.forEach((chip) => {
+    const n = items.filter((item) => matches(item, chip.dataset.filter)).length;
+    const count = chip.querySelector('[data-count]');
+    if (count) count.textContent = String(n);
+    chip.hidden = chip.dataset.filter !== 'all' && n === 0;
+  });
+}
+recount();
 
 function applyFilter(filter, { updateUrl = true } = {}) {
   if (!filters.has(filter)) filter = 'all';
@@ -162,3 +170,41 @@ dialog.addEventListener('close', () => {
 
 // Without JavaScript the tiles open the photo file; with it they open the viewer.
 items.forEach((item) => linkOf(item).setAttribute('aria-haspopup', 'dialog'));
+
+// ---------- The owner's photos ----------
+const CATEGORY_LABELS = { exterior: 'Exterior', interior: 'Interior', wheels: 'Wheels', detail: 'Detail' };
+const TILE_SIZES = '(max-width: 639px) calc(100vw - 40px), (max-width: 1023px) calc(50vw - 40px), 960px';
+
+function photoItem(p, i) {
+  const { image } = p;
+  const largest = image.sizes.length ? image.sizes[image.sizes.length - 1].url : image.src;
+  // Portrait photos span two rows and panoramas two columns; otherwise a steady rhythm like the built-in layout.
+  let shape = i % 7 === 0 ? ' g-tall' : i % 7 === 4 ? ' g-wide' : '';
+  if (image.height > image.width * 1.1) shape = ' g-tall';
+  else if (image.width >= image.height * 1.9) shape = ' g-wide';
+  const label = CATEGORY_LABELS[p.category] || p.category;
+  return el('li', { class: `g-item${shape}`, 'data-category': p.category },
+    el('figure', { class: 'g-tile' },
+      el('a', { class: 'g-link', href: largest, 'aria-haspopup': 'dialog' },
+        el('img', { src: image.src, srcset: image.srcset, sizes: TILE_SIZES, width: image.width, height: image.height, alt: p.caption || `${label} valeting photo`, loading: i < 3 ? 'eager' : 'lazy', decoding: 'async' })),
+      el('figcaption', { class: 'g-cap' }, el('span', { class: 'g-cap-title', text: p.caption || `${label} finish` }), el('span', { class: 'label', text: label }))));
+}
+
+async function loadOwnPhotos() {
+  let data;
+  try {
+    data = await api.gallery();
+  } catch {
+    return; // keep the built-in photos
+  }
+  if (!data.photos || !data.photos.length) return;
+  if (dialog.open) dialog.close();
+  grid.replaceChildren(...data.photos.map(photoItem));
+  items = [...grid.querySelectorAll('.g-item')];
+  recount();
+  const note = document.querySelector('[data-g-note]');
+  if (note) note.hidden = true;
+  const pressed = chips.find((chip) => chip.getAttribute('aria-pressed') === 'true');
+  applyFilter(pressed && !pressed.hidden ? pressed.dataset.filter : 'all', { updateUrl: false });
+}
+loadOwnPhotos();

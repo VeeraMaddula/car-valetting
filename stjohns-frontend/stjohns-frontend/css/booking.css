@@ -122,6 +122,40 @@
 .bk-confirm-btn[aria-busy='true'] { cursor: progress; }
 .bk-hint { font-size: 13px; text-align: center; color: var(--muted); }
 .bk-hint.is-ready { color: var(--gold-hi); }
+/* ---------- Sale prices, sizes, extras, discount code, price summary, paused ---------- */
+.bk-service-price s { color: var(--faint); margin-right: 6px; }
+.bk-service-price .bk-sale { color: var(--gold-hi); }
+.bk-service-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-tag { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; padding: 4px 8px; border: 1px solid rgba(201, 162, 74, .5); color: var(--gold-hi); }
+.bk-tag-sale { background: rgba(201, 162, 74, .14); }
+.bk-sizes, .bk-extras { margin-top: 22px; gap: 10px; }
+.bk-size-opt, .bk-extra, .bk-discount-status { text-transform: none; letter-spacing: normal; }
+.bk-extras { border: 0; padding: 0; min-width: 0; }
+.bk-size-options { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.bk-size-opt { padding: 16px 18px; gap: 4px; }
+.bk-size-name { font-size: 15px; color: var(--ivory); }
+.bk-size-price { font-size: 13px; color: var(--muted); }
+.bk-extras-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.bk-extra { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid rgba(244, 238, 227, .18); cursor: pointer; font-size: 15px; color: var(--ivory); }
+.bk-extra:has(input:checked) { border-color: var(--gold); background: rgba(201, 162, 74, .12); }
+.bk-extra input { width: 18px; height: 18px; accent-color: var(--gold); flex: none; }
+.bk-extra-name { flex: 1; }
+.bk-extra-price { color: var(--muted); font-size: 14px; }
+.bk-discount-row { display: flex; gap: 10px; }
+.bk-discount-row input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: .08em; }
+.bk-discount-status { font-size: 13px; color: var(--muted); }
+.bk-discount-status.is-ok { color: var(--ok); }
+.bk-discount-status.is-bad { color: var(--danger); }
+.bk-price { display: flex; flex-direction: column; gap: 10px; }
+.bk-price-list { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.bk-price-list div { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+.bk-price-list dt { color: var(--body); }
+.bk-price-list dd { margin: 0; color: var(--ivory); white-space: nowrap; }
+.bk-price-list .is-discount dd { color: var(--ok); }
+.bk-price-total { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.bk-price-amount { font-family: var(--font-display); font-size: 32px; line-height: 1; }
+.bk-paused { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 24px; }
+.bk-paused-title { font-family: var(--font-display); font-size: 24px; color: var(--ivory); }
 .bk-reserved { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--gold); color: var(--gold-hi); font-size: 12px; letter-spacing: .24em; text-transform: uppercase; }
 .bk-talk { border: 1px solid rgba(244, 238, 227, .12); padding: 22px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
 .bk-talk-text { display: flex; flex-direction: column; gap: 4px; font-size: 15px; }

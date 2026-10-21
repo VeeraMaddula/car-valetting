@@ -18,7 +18,7 @@ const SLOT_REASONS = {
   beyond_window: 'Not yet open for booking',
 };
 const HANDOVER_LABELS = { drop_off: 'Drop off at St Johns Park', collection: 'Vehicle collection' };
-const FORM_FIELDS = ['name', 'phone', 'email', 'vehicle', 'collectionAddress', 'notes'];
+const FORM_FIELDS = ['name', 'phone', 'email', 'vehicle', 'collectionAddress', 'notes', 'discountCode', 'vehicleSize', 'addons'];
 const GENERIC_ERROR = `Something went wrong. Please try again, or call ${BUSINESS.phone}.`;
 
 // ---------- Elements ----------
@@ -43,6 +43,14 @@ const confirmBtn = $('[data-confirm]');
 const hintEl = $('[data-hint]');
 const submitError = $('[data-submit-error]');
 const doneEl = $('[data-done]');
+const pausedEl = $('[data-paused]');
+const sizesWrap = $('[data-sizes-wrap]');
+const sizesEl = $('[data-sizes]');
+const extrasWrap = $('[data-extras-wrap]');
+const extrasEl = $('[data-extras]');
+const discountBtn = $('[data-discount-apply]');
+const discountStatus = $('[data-discount-status]');
+const priceEl = $('[data-price]');
 
 // ---------- State ----------
 const state = {
@@ -54,6 +62,10 @@ const state = {
   date: null,
   period: null,
   service: null,
+  size: null,
+  addons: new Set(),
+  discount: null, // a valid /discounts/check result plus `key` (the service|size it was checked for)
+  discountTried: null, // the code last sent to /discounts/check, re-checked when the service or size changes
   handover: 'drop_off',
   searching: false,
   searchError: null,
@@ -76,6 +88,16 @@ const businessAddress = () => (state.config && state.config.business && state.co
 const depositEur = () => (state.config && state.config.booking ? state.config.booking.depositAmountEur : null);
 const lastBookable = () => state.lastBookable || addDays(state.today, state.config.booking.maxDaysAhead);
 const errorMessage = (err) => (err instanceof ApiError ? err.message : GENERIC_ERROR);
+const bySize = () => Boolean(state.config && state.config.booking && state.config.booking.pricesBySize);
+const sizeLabel = (code) => ((state.config.booking.vehicleSizes || []).find((v) => v.code === code) || {}).label || '';
+const discountKey = () => `${state.service}|${state.size || ''}`;
+let discountSeq = 0;
+
+/** { priceEur, salePriceEur } for a service: the chosen size's price, or the base price until a size is picked. */
+function servicePrice(s, size = state.size) {
+  if (bySize() && size && s.prices && s.prices[size]) return s.prices[size];
+  return { priceEur: s.priceEur, salePriceEur: s.salePriceEur };
+}
 
 function setText(node, text) {
   if (node.textContent !== text) node.textContent = text;
@@ -211,6 +233,71 @@ function detailsGap() {
 function selectService(code) {
   state.service = code;
   render();
+  recheckDiscount();
+}
+
+function selectSize(code) {
+  state.size = code;
+  clearFieldError(form.querySelector('[name="vehicleSize"]'));
+  render();
+  recheckDiscount();
+}
+
+function toggleAddon(id, on) {
+  if (on) state.addons.add(id);
+  else state.addons.delete(id);
+  clearFieldError(form.querySelector('[name="addons"]'));
+  renderSummary();
+}
+
+// ---------- Discount code ----------
+function setDiscountStatus(text, kind = '') {
+  setText(discountStatus, text);
+  discountStatus.classList.toggle('is-ok', kind === 'ok');
+  discountStatus.classList.toggle('is-bad', kind === 'bad');
+}
+
+/** Checks the code against the chosen service (and size) without using it up; the booking itself re-checks it. */
+async function applyDiscount() {
+  const code = inputs.discountCode.value.trim();
+  clearFieldError(inputs.discountCode);
+  state.discount = null;
+  state.discountTried = code || null;
+  if (!code) {
+    setDiscountStatus('');
+    renderSummary();
+    return;
+  }
+  if (!state.service) {
+    setDiscountStatus('Choose a service first, then apply the code.', 'bad');
+    renderSummary();
+    return;
+  }
+  const seq = ++discountSeq;
+  const key = discountKey();
+  discountBtn.disabled = true;
+  setDiscountStatus('Checking…');
+  try {
+    const res = await api.checkDiscount(code, state.service, bySize() ? state.size : null);
+    if (seq !== discountSeq) return;
+    if (res.valid) {
+      state.discount = { ...res, key };
+      setDiscountStatus(`${res.code} applied · ${res.label} (−${euro(res.discountEur)})`, 'ok');
+    } else {
+      setDiscountStatus(res.message, 'bad');
+    }
+  } catch (err) {
+    if (seq === discountSeq) setDiscountStatus(errorMessage(err), 'bad');
+  } finally {
+    if (seq === discountSeq) {
+      discountBtn.disabled = false;
+      renderSummary();
+    }
+  }
+}
+
+function recheckDiscount() {
+  if (state.discountTried && inputs.discountCode.value.trim() === state.discountTried) applyDiscount();
 }
 
 function selectDate(date) {
@@ -244,6 +331,7 @@ function render() {
   const slot = day && day.slots.find((s) => s.period === state.period);
   if (slot && slot.status !== 'available') state.period = null;
   renderServices();
+  renderSizes();
   renderWeek();
   renderSlots();
   renderHandover();
@@ -260,15 +348,59 @@ function buildServices() {
     const check = icon(ICONS.check, 18);
     check.classList.add('bk-service-check');
     check.setAttribute('stroke-width', '2');
+    const onSale = s.salePriceEur !== null && s.salePriceEur !== undefined;
+    const from = s.priceFrom || bySize() ? 'From ' : '';
+    const tags = [
+      s.featured ? el('span', { class: 'bk-tag', text: 'Signature' }) : null,
+      onSale ? el('span', { class: 'bk-tag bk-tag-sale', text: s.saleEndsOn ? `Sale until ${fmt.short(s.saleEndsOn)}` : 'Sale' }) : null,
+    ].filter(Boolean);
     return el('button', { type: 'button', class: 'choice bk-service', 'aria-pressed': 'false', 'data-key': s.code, onclick: () => selectService(s.code) },
       el('span', { class: 'bk-service-top' }, el('span', { class: 'bk-service-name', text: s.name }), check),
+      tags.length ? el('span', { class: 'bk-service-tags' }, tags) : null,
       s.durationLabel ? el('span', { class: 'bk-service-duration', text: s.durationLabel }) : null,
-      s.priceEur !== null && s.priceEur !== undefined ? el('span', { class: 'bk-service-price', text: `From ${euro(s.priceEur)}` }) : null);
+      s.priceEur === null || s.priceEur === undefined ? null
+        : onSale
+          ? el('span', { class: 'bk-service-price' }, from,
+            el('s', {}, el('span', { class: 'sr-only', text: 'was ' }), euro(s.priceEur)),
+            el('span', { class: 'bk-sale' }, el('span', { class: 'sr-only', text: 'now ' }), euro(s.salePriceEur)))
+          : el('span', { class: 'bk-service-price', text: `${from}${euro(s.priceEur)}` }));
   }));
 }
 
 function renderServices() {
   servicesEl.querySelectorAll('[data-key]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.key === state.service)));
+}
+
+function buildSizes() {
+  sizesWrap.hidden = !bySize();
+  if (!bySize()) return;
+  sizesEl.replaceChildren(...state.config.booking.vehicleSizes.map((v) => el('button', {
+    type: 'button', class: 'choice bk-size-opt', 'aria-pressed': 'false', 'data-key': v.code, onclick: () => selectSize(v.code),
+  }, el('span', { class: 'bk-size-name', text: v.label }), el('span', { class: 'bk-size-price', 'data-size-price': '' }))));
+}
+
+/** Pressed state, plus each size's price for the chosen service. */
+function renderSizes() {
+  if (!bySize()) return;
+  const service = selectedService();
+  form.querySelector('[name="vehicleSize"]').value = state.size || '';
+  sizesEl.querySelectorAll('[data-key]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.key === state.size));
+    const p = service ? servicePrice(service, b.dataset.key) : null;
+    const amount = p && p.priceEur !== null && p.priceEur !== undefined ? p.salePriceEur ?? p.priceEur : null;
+    setText(b.querySelector('[data-size-price]'), amount === null ? '' : `${service.priceFrom ? 'From ' : ''}${euro(amount)}`);
+  });
+}
+
+function buildExtras() {
+  const addons = state.config.addons || [];
+  extrasWrap.hidden = !addons.length;
+  extrasEl.replaceChildren(...addons.map((a) => {
+    const box = el('input', { type: 'checkbox', value: a.id });
+    box.checked = state.addons.has(a.id);
+    box.addEventListener('change', () => toggleAddon(a.id, box.checked));
+    return el('label', { class: 'bk-extra' }, box, el('span', { class: 'bk-extra-name', text: a.name }), el('span', { class: 'bk-extra-price', text: `+${euro(a.priceEur)}` }));
+  }));
 }
 
 function renderWeek() {
@@ -469,22 +601,50 @@ function renderSummary() {
   const service = selectedService();
   const slot = selectedSlot();
   const gapInDetails = detailsGap();
-  setStep(1, Boolean(service));
+  const needsSize = bySize() && !state.size;
+  const serviceText = service ? `${service.name}${bySize() && state.size ? ` · ${sizeLabel(state.size)}` : ''}` : '';
+  setStep(1, Boolean(service) && !needsSize);
   setStep(2, Boolean(slot));
   setStep(3, !gapInDetails);
-  setMeta(1, service ? service.name : 'Required', Boolean(service));
+  setMeta(1, service ? serviceText : 'Required', Boolean(service) && !needsSize);
   setMeta(2, slot ? `${fmt.short(state.date)} · ${slot.label}` : 'Required', Boolean(slot));
   if (state.booking) return; // the summary now describes the confirmed booking
 
-  setSummary('service', service ? service.name : 'Not selected', !service);
+  setSummary('service', service ? serviceText : 'Not selected', !service);
   setSummary('date', state.date ? fmt.long(state.date) : 'Not selected', !state.date);
   setSummary('slot', slot ? `${slot.label} · ${slotTime(slot)}` : 'Not selected', !slot);
   setSummary('handover', HANDOVER_LABELS[state.handover], false);
+  renderPrice(service);
 
-  const gap = !service ? 'Choose a service to continue' : !slot ? 'Pick a free slot' : gapInDetails;
+  const gap = !service ? 'Choose a service to continue' : needsSize ? 'Choose your vehicle size' : !slot ? 'Pick a free slot' : gapInDetails;
   confirmBtn.disabled = Boolean(gap);
   setText(hintEl, gap || 'Ready — no payment is taken now');
   hintEl.classList.toggle('is-ready', !gap);
+}
+
+/** Service (at the chosen size, sale price if live) + extras − a checked discount code. */
+function renderPrice(service) {
+  const p = service ? servicePrice(service) : null;
+  if (!p || p.priceEur === null || p.priceEur === undefined) {
+    priceEl.hidden = true;
+    return;
+  }
+  const onSale = p.salePriceEur !== null && p.salePriceEur !== undefined;
+  const base = onSale ? p.salePriceEur : p.priceEur;
+  const extras = (state.config.addons || []).filter((a) => state.addons.has(a.id));
+  const discount = state.discount && state.discount.key === discountKey() ? state.discount : null;
+  const rows = [
+    [`${service.name}${bySize() && state.size ? ` · ${sizeLabel(state.size)}` : ''}`, onSale ? `${euro(base)} (was ${euro(p.priceEur)})` : euro(base)],
+    ...extras.map((a) => [a.name, `+${euro(a.priceEur)}`]),
+    discount ? [`Code ${discount.code}`, `−${euro(discount.discountEur)}`, 'is-discount'] : null,
+  ].filter(Boolean);
+  $('[data-price-list]').replaceChildren(...rows.map(([label, value, cls]) => el('div', { class: cls }, el('dt', { text: label }), el('dd', { text: value }))));
+  const total = Math.round((base + extras.reduce((t, a) => t + a.priceEur, 0) - (discount ? discount.discountEur : 0)) * 100) / 100;
+  const from = service.priceFrom || (bySize() && !state.size);
+  setText($('[data-price-total-label]'), from ? 'Estimated total' : 'Total');
+  setText($('[data-price-total]'), `${from ? 'From ' : ''}${euro(Math.max(0, total))}`);
+  $('[data-price-note]').hidden = !service.priceFrom;
+  priceEl.hidden = false;
 }
 
 // ---------- Submit ----------
@@ -514,10 +674,24 @@ function slotTaken(message) {
   slotError.focus();
 }
 
+/** The owner has paused online booking (Settings in the dashboard): say so and point to the phone. */
+function showPaused(message) {
+  setText(pausedEl.querySelector('[data-paused-text]'), message || `Please call us on ${businessPhone()} and we'll find you a slot.`);
+  setText(pausedEl.querySelector('[data-paused-call]'), `Call ${businessPhone()}`);
+  pausedEl.hidden = false;
+  form.hidden = true;
+  $('.bk-summary').hidden = true;
+}
+
 function handleSubmitError(err) {
   const error = err instanceof ApiError ? err : new ApiError(0, 'CLIENT', GENERIC_ERROR);
   if (error.code === 'SLOT_UNAVAILABLE') {
     slotTaken(error.message);
+    return;
+  }
+  if (error.code === 'BOOKING_PAUSED') {
+    showPaused(error.message);
+    pausedEl.scrollIntoView({ block: 'start' });
     return;
   }
   if (error.code === 'VALIDATION_FAILED') {
@@ -537,7 +711,7 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   const service = selectedService();
   const slot = selectedSlot();
-  if (state.submitting || state.booking || !service || !slot || detailsGap()) return;
+  if (state.submitting || state.booking || !service || !slot || detailsGap() || (bySize() && !state.size)) return;
 
   const value = (name) => inputs[name].value.trim();
   const body = {
@@ -551,6 +725,9 @@ form.addEventListener('submit', async (event) => {
     handover: state.handover,
     collectionAddress: state.handover === 'collection' ? value('collectionAddress') : null,
     notes: value('notes') || null,
+    vehicleSize: bySize() ? state.size : null,
+    addons: [...state.addons],
+    discountCode: value('discountCode') || null,
   };
   // One key per booking attempt: a retry after a dropped connection can never create a second booking.
   state.idempotencyKey = state.idempotencyKey || newIdempotencyKey();
@@ -642,8 +819,14 @@ function bookAnother() {
   state.booking = null;
   state.service = null;
   state.period = null;
+  state.addons.clear();
+  state.discount = null;
+  state.discountTried = null;
   inputs.vehicle.value = '';
   inputs.notes.value = '';
+  inputs.discountCode.value = '';
+  setDiscountStatus('');
+  extrasEl.querySelectorAll('input').forEach((box) => { box.checked = false; });
   showFieldErrors(form, {});
   if (state.date) state.weekStart = mondayOf(state.date);
   doneEl.hidden = true;
@@ -691,6 +874,21 @@ form.addEventListener('input', (event) => {
   clearFieldError(event.target);
   renderSummary();
 });
+// Editing the code clears the applied discount until "Apply" is pressed again; Enter applies instead of submitting.
+inputs.discountCode.addEventListener('input', () => {
+  discountSeq += 1;
+  discountBtn.disabled = false;
+  state.discount = null;
+  state.discountTried = null;
+  setDiscountStatus('');
+  renderSummary();
+});
+inputs.discountCode.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  applyDiscount();
+});
+discountBtn.addEventListener('click', applyDiscount);
 $('[data-book-another]').addEventListener('click', bookAnother);
 $('[data-load-retry]').addEventListener('click', init);
 
@@ -715,8 +913,14 @@ async function init() {
     form.hidden = true;
     return;
   }
+  if (state.config.booking && state.config.booking.paused) {
+    showPaused(state.config.booking.pausedMessage);
+    return;
+  }
   form.hidden = false;
   buildServices();
+  buildSizes();
+  buildExtras();
   const wanted = param('service');
   if ((state.config.services || []).some((s) => s.code === wanted)) state.service = wanted;
   const deposit = depositEur();

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: http://localhost:8080 http://127.0.0.1:8080; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Dashboard · St Johns Park Car Valeting</title>
+<meta name="theme-color" content="#0B0A08">
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/account.css">
+<link rel="stylesheet" href="css/admin.css">
+<script type="module" src="js/admin.js"></script>
+</head>
+<body class="adm">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="adm-top">
+  <div class="adm-top-inner">
+    <a class="brand" href="index.html" aria-label="St Johns Park Car Valeting — view the website"><span class="brand-name">ST JOHNS PARK</span><span class="brand-sub">DASHBOARD</span></a>
+    <div class="adm-top-actions">
+      <div class="user-chip" data-user-chip hidden>
+        <span class="avatar" aria-hidden="true" data-initials></span>
+        <span class="adm-user"><span class="user-name" data-user-name></span><span class="adm-role" data-user-role></span></span>
+        <button class="btn btn-ghost btn-sm" type="button" data-sign-out>Sign out</button>
+      </div>
+      <button class="icon-btn adm-menu" type="button" aria-expanded="false" aria-controls="adm-nav" aria-label="Menu" data-menu><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<div class="adm-shell">
+  <nav class="adm-nav" id="adm-nav" aria-label="Dashboard" data-nav>
+    <a href="#overview" data-nav-item="overview">Overview</a>
+    <a href="#bookings" data-nav-item="bookings">Bookings<span class="adm-badge" data-badge hidden></span></a>
+    <a href="#prices" data-nav-item="prices">Services &amp; prices</a>
+    <a href="#discounts" data-nav-item="discounts">Discounts</a>
+    <a href="#photos" data-nav-item="photos">Photos</a>
+    <a href="#customers" data-nav-item="customers">Customers</a>
+    <a href="#analytics" data-nav-item="analytics">Analytics</a>
+    <a href="#settings" data-nav-item="settings">Settings</a>
+    <a class="adm-nav-site" href="index.html">View website</a>
+  </nav>
+
+  <main class="adm-main" id="main" tabindex="-1">
+    <div class="adm-loading" role="status" data-loading><span class="spinner spinner-light" aria-hidden="true"></span>Loading the dashboard…</div>
+    <div class="notice notice-error adm-denied" role="alert" data-denied hidden>
+      <p data-denied-text>This page is for the St Johns Park team.</p>
+      <a class="btn btn-ghost btn-sm" href="index.html">Back to the website</a>
+    </div>
+    <section class="adm-screen" data-screen="overview" aria-labelledby="h-overview" hidden></section>
+    <section class="adm-screen" data-screen="bookings" aria-labelledby="h-bookings" hidden></section>
+    <section class="adm-screen" data-screen="prices" aria-labelledby="h-prices" hidden></section>
+    <section class="adm-screen" data-screen="discounts" aria-labelledby="h-discounts" hidden></section>
+    <section class="adm-screen" data-screen="photos" aria-labelledby="h-photos" hidden></section>
+    <section class="adm-screen" data-screen="customers" aria-labelledby="h-customers" hidden></section>
+    <section class="adm-screen" data-screen="analytics" aria-labelledby="h-analytics" hidden></section>
+    <section class="adm-screen" data-screen="settings" aria-labelledby="h-settings" hidden></section>
+  </main>
+</div>
+
+<dialog class="adm-dialog" aria-labelledby="confirm-title" data-confirm>
+  <form method="dialog" class="adm-dialog-body">
+    <h2 class="adm-dialog-title" id="confirm-title" data-confirm-title></h2>
+    <p class="panel-copy" data-confirm-text></p>
+    <div class="adm-dialog-extra" data-confirm-extra></div>
+    <div class="adm-dialog-actions">
+      <button class="btn btn-ghost btn-sm" value="cancel" data-confirm-cancel>Keep</button>
+      <button class="btn btn-gold btn-sm" value="ok" data-confirm-ok>Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="adm-dialog adm-dialog-wide" aria-labelledby="modal-title" data-modal>
+  <div class="adm-dialog-body">
+    <div class="adm-dialog-head">
+      <h2 class="adm-dialog-title" id="modal-title" data-modal-title></h2>
+      <button class="icon-btn" type="button" aria-label="Close" data-modal-close><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div data-modal-content></div>
+  </div>
+</dialog>
+</body>
+</html>

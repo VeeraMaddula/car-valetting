@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: http://localhost:8080 http://127.0.0.1:8080; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>St Johns Park Car Valeting · Waterford</title>
 <meta name="description" content="Premium hand car valeting in Waterford. Mini and full valets, wheel and finish care. Book online in under a minute — three slots a day, Monday to Saturday.">
@@ -79,7 +79,7 @@
         <div><dt>Or request collection</dt><dd>Drop off</dd></div>
       </dl>
       <div class="hero-controls">
-        <p class="hero-counter" aria-live="polite"><span class="hero-num" data-slide-num>01</span><span>/ 07</span><span class="hero-label" data-slide-label>Snow foam pre-wash</span></p>
+        <p class="hero-counter" aria-live="polite"><span class="hero-num" data-slide-num>01</span><span data-slide-total>/ 07</span><span class="hero-label" data-slide-label>Snow foam pre-wash</span></p>
         <div class="hero-buttons">
           <button class="round-btn" type="button" data-prev aria-label="Previous slide"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
           <div class="hero-dots" data-dots></div>
@@ -102,9 +102,9 @@
         <p class="eyebrow">Our services</p>
         <h2 class="display h2">Clean is expected. <em>Detail is the difference.</em></h2>
       </div>
-      <p class="lead">Three ways to bring your car back to its best — every one finished by hand and inspected under light before handover.</p>
+      <p class="lead" data-services-lead>Three ways to bring your car back to its best — every one finished by hand and inspected under light before handover.</p>
     </div>
-    <div class="services">
+    <div class="services" data-services>
       <article class="card card-hover service" data-service="mini">
         <div class="service-top"><span class="service-num">01</span><span class="label">Approx. 2 hours</span></div>
         <h3 class="h3">Mini Valet</h3>
@@ -152,7 +152,7 @@
         <p class="eyebrow">Real results</p>
         <h2 class="display h2">Drag to reveal <em>the difference.</em></h2>
       </div>
-      <p class="lead">Slide across to compare before and after.</p>
+      <p class="lead" data-compare-lead>Slide across to compare before and after.</p>
     </div>
     <div class="compare" data-compare>
       <img src="assets/img/slide-studio-1280.webp" srcset="assets/img/slide-studio-1280.webp 1280w, assets/img/slide-studio-2400.webp 2400w" sizes="(max-width: 1240px) 100vw, 1240px" alt="After: freshly valeted black saloon" loading="lazy">
