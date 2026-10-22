@@ -154,7 +154,8 @@ function initHeader() {
       if (e.target.closest('a')) { toggle.setAttribute('aria-expanded', 'false'); menu.hidden = true; }
     });
   }
-  // Swap "Sign in" for "My bookings" once we know the visitor is signed in.
+  // Swap "Sign in" for "My bookings" once we know the visitor is signed in. In the header, hovering it (or tabbing
+  // to it) opens a small menu with My profile and Sign out; the mobile menu lists those as items instead.
   const accountLinks = document.querySelectorAll('[data-account-link]');
   if (accountLinks.length) {
     currentUser().then((user) => {
@@ -163,10 +164,62 @@ function initHeader() {
         a.href = 'my-bookings.html';
         const label = a.querySelector('[data-account-label]') || a;
         label.textContent = 'My bookings';
+        if (a.closest('.mobile-nav')) a.after(el('a', { href: 'profile.html', text: 'My profile' }), signOutButton('mobile-signout'));
+        else accountMenu(a);
       });
     });
   }
   document.querySelectorAll('[data-year]').forEach((n) => { n.textContent = String(new Date().getFullYear()); });
+}
+
+function signOutButton(className) {
+  return el('button', {
+    type: 'button',
+    class: className,
+    onclick: async (e) => {
+      const button = e.currentTarget;
+      button.disabled = true;
+      try {
+        await api.logout();
+        location.assign('index.html');
+      } catch (err) {
+        toast(err.message, { error: true });
+        button.disabled = false;
+      }
+    },
+  }, 'Sign out');
+}
+
+/** "My bookings" with a menu that opens on hover or keyboard focus (and on first tap where there's no hover). */
+function accountMenu(link) {
+  const wrap = el('div', { class: 'account-menu' });
+  const menu = el('div', { class: 'account-dropdown', id: 'account-dropdown' },
+    el('div', { class: 'account-dropdown-inner', role: 'group', 'aria-label': 'Account' },
+      el('a', { href: 'profile.html' }, icon(['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M4 21c0-4 4-6 8-6s8 2 8 6']), 'My profile'),
+      signOutButton('account-signout')));
+  link.replaceWith(wrap);
+  wrap.append(link, menu);
+  link.setAttribute('aria-describedby', 'account-dropdown');
+  const close = () => wrap.classList.remove('is-open');
+  const reopen = () => wrap.classList.remove('is-closed');
+  // Touch screens have no hover: the first tap opens the menu, a second tap on "My bookings" follows the link.
+  link.addEventListener('click', (e) => {
+    if (window.matchMedia('(hover: none)').matches && !wrap.classList.contains('is-open')) {
+      e.preventDefault();
+      wrap.classList.add('is-open');
+    }
+  });
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
+  // Escape closes it, even with focus inside, until the pointer leaves or focus moves on into the menu.
+  wrap.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    close();
+    wrap.classList.add('is-closed');
+    link.focus();
+  });
+  wrap.addEventListener('mouseleave', reopen);
+  wrap.addEventListener('focusin', (e) => { if (e.target !== link) reopen(); });
+  wrap.addEventListener('focusout', (e) => { if (!wrap.contains(e.relatedTarget)) { reopen(); close(); } });
 }
 
 initHeader();

@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Deps } from '../deps.js';
 import { bookingDetail, cancelByCustomer, claimBooking, findUserBooking, listUserBookings, toCustomerView } from '../domain/bookings.js';
+import { deleteMyAccount, exportMyData, getProfile, updateProfile } from '../domain/profile.js';
+import { todayInZone } from '../lib/time.js';
 import { optionalTrimmed, parse } from '../lib/validate.js';
-import { requireUser } from '../plugins/auth.js';
+import { clearSessionCookie, requireUser } from '../plugins/auth.js';
 
 const cancelBody = z.object({ reason: optionalTrimmed(500, 'Reason') }).default({ reason: null });
 
@@ -35,4 +37,29 @@ export async function accountRoutes(app: FastifyInstance, { deps }: { deps: Deps
   app.post('/me/bookings/claim', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => ({
     booking: await claimBooking(deps, req.user!.id, req.body),
   }));
+
+  // ---------- My profile ----------
+
+  app.get('/me/profile', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { profile: await getProfile(deps, req.user!.id) };
+  });
+
+  app.put('/me/profile', { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } }, async (req) => ({
+    profile: await updateProfile(deps, req.user!, req.body),
+  }));
+
+  /** GDPR right of access: a copy of everything held about this account, downloaded as a JSON file. */
+  app.get('/me/data', { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    reply.header('Content-Disposition', `attachment; filename="st-johns-park-my-data-${todayInZone(deps.config.TIMEZONE)}.json"`);
+    return exportMyData(deps, req.user!);
+  });
+
+  /** GDPR right to erasure: delete the account (password required), then sign out. */
+  app.post('/me/delete', { config: { rateLimit: { max: 5, timeWindow: '15 minutes' } } }, async (req, reply) => {
+    const result = await deleteMyAccount(deps, req.user!, req.body);
+    clearSessionCookie(reply, deps.config);
+    return { ok: true, ...result };
+  });
 }

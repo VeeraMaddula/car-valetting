@@ -110,6 +110,13 @@ export async function register(deps: Deps, raw: unknown): Promise<SessionUser> {
   }
 }
 
+/** Whether `plain` is this account's password (for changes that need it typed again, e.g. a new email). */
+export async function checkPassword(db: Queryable, userId: string, plain: string): Promise<boolean> {
+  const { rows } = await db.query<{ password_hash: string }>('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  if (!rows[0]) return false;
+  return verify(rows[0].password_hash, plain).catch(() => false);
+}
+
 export async function login(deps: Deps, raw: unknown): Promise<SessionUser> {
   const input = parse(loginSchema, raw);
   const { rows } = await deps.db.query(

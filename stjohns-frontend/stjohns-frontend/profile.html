@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en" data-ga-id="G-Z41NNRZ404">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: http://localhost:8080 http://127.0.0.1:8080; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>My profile · St Johns Park Car Valeting</title>
+<meta name="description" content="Update your personal details, download a copy of your data or delete your St Johns Park account.">
+<meta name="theme-color" content="#0B0A08">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap">
+<link rel="stylesheet" href="css/site.css">
+<link rel="stylesheet" href="css/account.css">
+<script type="module" src="js/profile.js"></script>
+<script src="analytics.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="container">
+    <div class="topbar-group">
+      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>Waterford · X91 H79Y</span>
+      <span class="topbar-extra"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Mon–Fri 9:00–17:30 · Sat 10:00–17:00</span>
+    </div>
+    <a href="tel:+353894709672"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9A24A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>089 470 9672</a>
+  </div>
+</div>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="index.html" aria-label="St Johns Park Car Valeting — home"><span class="brand-name">ST JOHNS PARK</span><span class="brand-sub">CAR VALETING SERVICE</span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="index.html#services">Services</a><a href="index.html#process">Process</a><a href="index.html#results">Results</a><a href="gallery.html">Gallery</a><a href="index.html#about">About</a><a href="track.html">Track</a>
+    </nav>
+    <div class="header-actions">
+      <div class="user-chip" data-user-chip hidden>
+        <span class="avatar" aria-hidden="true" data-initials></span>
+        <a class="user-name" href="my-bookings.html" data-user-name></a>
+        <button class="btn btn-ghost btn-sm" type="button" data-sign-out>Sign out</button>
+      </div>
+      <button class="icon-btn nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </div>
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Mobile" hidden>
+    <div class="container">
+      <a href="index.html">Home</a><a href="index.html#services">Services</a><a href="gallery.html">Gallery</a><a href="track.html">Track a booking</a><a href="booking.html">Book a valet</a><a href="my-bookings.html">My bookings</a><a href="profile.html" aria-current="page">My profile</a>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+<div class="container mb-loading" role="status" data-loading><span class="spinner spinner-light" aria-hidden="true"></span>Loading your profile…</div>
+
+<div class="container notice notice-error pf-load-error" role="alert" data-load-error hidden>
+  <p data-load-error-text></p>
+  <button class="btn btn-ghost btn-sm" type="button" data-retry>Try again</button>
+</div>
+
+<div data-signed-in hidden>
+
+  <section class="page-band band-row" aria-labelledby="page-title">
+    <div class="container">
+      <div class="band-copy">
+        <p class="eyebrow">My account</p>
+        <h1 class="display" id="page-title">My <em>profile</em></h1>
+        <p class="lead band-lead">Keep your details up to date. We only use them to look after your bookings.</p>
+      </div>
+      <a class="btn btn-ghost" href="my-bookings.html">My bookings</a>
+    </div>
+  </section>
+
+  <div class="container page-body split">
+
+    <form class="card pf-main surface-input" novalidate data-profile-form>
+
+      <section class="pf-section" aria-labelledby="pf-details-title">
+        <div class="pf-section-head">
+          <h2 class="panel-title" id="pf-details-title">Personal details</h2>
+          <p class="panel-copy">Signed in as <strong data-username></strong> · member since <span data-member-since></span></p>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="pf-name">Full name</label>
+            <input id="pf-name" name="fullName" type="text" autocomplete="name" maxlength="100" required aria-describedby="pf-name-error">
+            <span class="error" id="pf-name-error"></span>
+          </div>
+          <div class="field">
+            <label for="pf-phone">Mobile</label>
+            <input id="pf-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required aria-describedby="pf-phone-hint pf-phone-error">
+            <span class="hint" id="pf-phone-hint">For booking confirmations and the evening-before reminder.</span>
+            <span class="error" id="pf-phone-error"></span>
+          </div>
+          <div class="field">
+            <label for="pf-email">Email</label>
+            <input id="pf-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required aria-describedby="pf-email-hint pf-email-error">
+            <span class="hint" id="pf-email-hint">You sign in with this, and password resets go here.</span>
+            <span class="error" id="pf-email-error"></span>
+          </div>
+          <div class="field">
+            <label for="pf-dob">Date of birth <span class="pf-optional">(optional)</span></label>
+            <input id="pf-dob" name="dateOfBirth" type="date" min="1900-01-01" aria-describedby="pf-dob-hint pf-dob-error">
+            <span class="hint" id="pf-dob-hint">Only if you want to add it. Clear the field to remove it.</span>
+            <span class="error" id="pf-dob-error"></span>
+          </div>
+        </div>
+        <div class="field pf-password" data-password-field hidden>
+          <label for="pf-current-password">Current password</label>
+          <input id="pf-current-password" name="currentPassword" type="password" autocomplete="current-password" maxlength="200" aria-describedby="pf-current-password-hint pf-current-password-error">
+          <span class="hint" id="pf-current-password-hint">Needed to change your email, so nobody else can take over your account.</span>
+          <span class="error" id="pf-current-password-error"></span>
+        </div>
+      </section>
+
+      <section class="pf-section" aria-labelledby="pf-address-title">
+        <div class="pf-section-head">
+          <h2 class="panel-title" id="pf-address-title">Address <span class="pf-optional">(optional)</span></h2>
+          <p class="panel-copy">Used to fill in the collection address when you ask us to collect your car.</p>
+        </div>
+        <div class="field">
+          <label for="pf-line1">Address line 1</label>
+          <input id="pf-line1" name="addressLine1" type="text" autocomplete="address-line1" maxlength="120" aria-describedby="pf-line1-error">
+          <span class="error" id="pf-line1-error"></span>
+        </div>
+        <div class="field">
+          <label for="pf-line2">Address line 2</label>
+          <input id="pf-line2" name="addressLine2" type="text" autocomplete="address-line2" maxlength="120" aria-describedby="pf-line2-error">
+          <span class="error" id="pf-line2-error"></span>
+        </div>
+        <div class="grid-2 pf-grid-3">
+          <div class="field">
+            <label for="pf-town">Town or city</label>
+            <input id="pf-town" name="town" type="text" autocomplete="address-level2" maxlength="60" aria-describedby="pf-town-error">
+            <span class="error" id="pf-town-error"></span>
+          </div>
+          <div class="field">
+            <label for="pf-county">County</label>
+            <select id="pf-county" name="county" autocomplete="address-level1" aria-describedby="pf-county-error" data-county></select>
+            <span class="error" id="pf-county-error"></span>
+          </div>
+          <div class="field">
+            <label for="pf-eircode">Eircode</label>
+            <input id="pf-eircode" name="eircode" type="text" autocomplete="postal-code" autocapitalize="characters" spellcheck="false" maxlength="8" placeholder="X91 H79Y" aria-describedby="pf-eircode-error">
+            <span class="error" id="pf-eircode-error"></span>
+          </div>
+        </div>
+      </section>
+
+      <p class="notice notice-error form-notice" role="alert" data-form-error></p>
+      <div class="pf-actions">
+        <button class="btn btn-gold" type="submit" data-save>Save changes</button>
+        <p class="pf-saved" role="status" data-saved></p>
+      </div>
+    </form>
+
+    <aside class="split-aside pf-aside" aria-label="Your data">
+
+      <section class="card aside-card aside-card-gold" aria-labelledby="pf-rights-title">
+        <h2 class="panel-title" id="pf-rights-title">Your data, your rights</h2>
+        <p class="panel-copy">Under GDPR you can see, correct and delete what we hold about you. We keep:</p>
+        <ul class="pf-keep">
+          <li><strong>Name, email and mobile</strong>: to confirm, remind you about and manage your bookings.</li>
+          <li><strong>Address</strong> (optional): for car collections.</li>
+          <li><strong>Date of birth</strong> (optional): only if you add it.</li>
+          <li><strong>Your bookings</strong>: the business's records of the work done.</li>
+        </ul>
+        <p class="panel-copy">We never sell your details or use them for anything else.</p>
+        <div class="pf-rights-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-download>Download my data</button>
+          <a class="link-arrow" href="account.html?mode=forgot">Change password</a>
+        </div>
+      </section>
+
+      <section class="card aside-card pf-danger" aria-labelledby="pf-delete-title">
+        <h2 class="panel-title" id="pf-delete-title">Delete my account</h2>
+        <p class="panel-copy">Deletes your account and removes your name and contact details from past bookings. This can't be undone. Cancel any upcoming booking first.</p>
+        <button class="btn btn-ghost btn-sm" type="button" aria-expanded="false" aria-controls="pf-delete-form" data-delete-start>Delete my account…</button>
+        <form class="pf-delete-form" id="pf-delete-form" novalidate data-delete-form hidden>
+          <div class="field">
+            <label for="pf-delete-password">Your password</label>
+            <input id="pf-delete-password" name="password" type="password" autocomplete="current-password" maxlength="200" aria-describedby="pf-delete-password-error">
+            <span class="error" id="pf-delete-password-error"></span>
+          </div>
+          <p class="notice notice-error form-notice" role="alert" data-form-error></p>
+          <div class="pf-delete-actions">
+            <button class="btn btn-danger btn-sm" type="submit">Delete permanently</button>
+            <button class="text-btn" type="button" data-delete-cancel>Keep my account</button>
+          </div>
+        </form>
+      </section>
+
+    </aside>
+  </div>
+</div>
+
+<div class="container signed-out" data-deleted hidden>
+  <h1 class="display" tabindex="-1">Your account has been deleted.</h1>
+  <p>Your personal details have been removed. Thank you for choosing St Johns Park; you're welcome back any time.</p>
+  <div class="signed-out-actions">
+    <a class="btn btn-gold" href="index.html">Home</a>
+    <a class="btn btn-ghost" href="booking.html">Book as a guest</a>
+  </div>
+</div>
+
+</main>
+
+<footer class="site-footer footer-slim">
+  <div class="container">
+    <span>© <span data-year>2026</span> St Johns Park Car Valeting Service</span>
+    <span><a href="tel:+353894709672">089 470 9672</a> · Waterford X91 H79Y · <a href="#" data-cookie-settings>Cookie settings</a></span>
+  </div>
+</footer>
+</body>
+</html>

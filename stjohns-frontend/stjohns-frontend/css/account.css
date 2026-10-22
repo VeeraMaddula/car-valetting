@@ -152,6 +152,24 @@
 .mb-main { flex: 1 1 660px; min-width: 0; display: flex; flex-direction: column; gap: 32px; }
 .mb-aside { flex: 1 1 300px; max-width: 380px; }
 .mb-loading { display: flex; align-items: center; gap: 14px; padding: 40px 0; color: var(--muted); }
+
+/* ---------- My profile ---------- */
+.pf-main { flex: 1 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 36px; }
+.pf-aside { flex: 1 1 300px; max-width: 380px; }
+.pf-section { display: flex; flex-direction: column; gap: 18px; }
+.pf-section + .pf-section { padding-top: 32px; border-top: 1px solid var(--line); }
+.pf-section-head { display: flex; flex-direction: column; gap: 6px; }
+.pf-optional { color: var(--faint); letter-spacing: .08em; text-transform: none; }
+.pf-grid-3 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.pf-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.pf-saved { font-size: 14px; color: var(--ok); }
+.pf-keep { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.55; color: var(--body); }
+.pf-keep strong { font-weight: 400; color: var(--ivory); }
+.pf-rights-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pf-danger { border-color: rgba(242, 164, 154, .3); }
+.pf-delete-form { display: flex; flex-direction: column; gap: 14px; }
+.pf-delete-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pf-load-error { margin-top: 40px; align-items: center; justify-content: space-between; }
 .next-card { position: relative; overflow: hidden; display: flex; gap: 36px; align-items: center; flex-wrap: wrap; padding: 36px 40px; border: 1px solid var(--gold); background: linear-gradient(120deg, var(--surface-raised) 0%, var(--surface) 60%); }
 .date-tile { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 112px; padding: 16px 0; border: 1px solid rgba(201, 162, 74, .45); }
 .date-tile .dt-dow, .date-tile .dt-mon { font-size: 12px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
@@ -223,7 +241,7 @@
 }
 @media (max-width: 760px) {
   .page-body { padding-top: 40px; padding-bottom: 72px; }
-  .track-aside, .mb-aside { max-width: none; }
+  .track-aside, .mb-aside, .pf-aside { max-width: none; }
   .track-notfound { padding: 28px 20px; gap: 18px; }
   .history-card { padding: 28px 22px; }
   .track-ref { font-size: 34px; }

@@ -257,6 +257,53 @@ suite('booking API on PostgreSQL', () => {
     expect(cancel.json.booking.status).toBe('cancelled');
   });
 
+  it('lets a customer update their profile, download their data and delete their account (GDPR)', async () => {
+    const reg = await call('POST', '/auth/register', { username: 'profiler', email: 'pro@example.com', password: 'profile password 1', fullName: 'Pro Filer', phone: '087 222 3333' });
+    const me = sessionCookie(reg);
+    const start = await call('GET', '/me/profile', undefined, { cookie: me });
+    expect(start.json.profile).toMatchObject({ username: 'profiler', email: 'pro@example.com', fullName: 'Pro Filer', dateOfBirth: null, address: { line1: null, eircode: null } });
+    expect((await call('GET', '/me/profile')).status).toBe(401);
+
+    const upcoming = await call('POST', '/bookings', booking(days[3], 'afternoon', { name: 'Pro Filer', email: 'pro@example.com', phone: '087 222 3333' }), { cookie: me });
+    expect(upcoming.status).toBe(201);
+    const ref = upcoming.json.booking.reference;
+
+    const details = { fullName: 'Pro Filer-Smith', email: 'pro@example.com', phone: '086 444 5555', dateOfBirth: '1990-05-14', addressLine1: '1 Main Street', addressLine2: null, town: 'Waterford', county: 'Waterford', eircode: 'x91h79y' };
+    const saved = await call('PUT', '/me/profile', details, { cookie: me });
+    expect(saved.status).toBe(200);
+    expect(saved.json.profile).toMatchObject({ fullName: 'Pro Filer-Smith', dateOfBirth: '1990-05-14', address: { line1: '1 Main Street', line2: null, town: 'Waterford', county: 'Waterford', eircode: 'X91 H79Y' } });
+    expect(saved.json.profile.phone.replace(/\s/g, '')).toBe('0864445555');
+    // The upcoming booking now carries the new name and phone, so reminders reach them.
+    const booked = (await call('GET', `/me/bookings/${ref}`, undefined, { cookie: me })).json.booking;
+    expect(booked.customerName).toBe('Pro Filer-Smith');
+    expect(booked.phone.replace(/\s/g, '')).toBe('0864445555');
+
+    const bad = await call('PUT', '/me/profile', { ...details, dateOfBirth: '2999-01-01', eircode: 'NOPE123', phone: '12' }, { cookie: me });
+    expect(bad.status).toBe(400);
+    expect(Object.keys(bad.json.error.fields)).toEqual(expect.arrayContaining(['dateOfBirth', 'eircode', 'phone']));
+
+    // A new email needs the current password, and can't be someone else's.
+    expect((await call('PUT', '/me/profile', { ...details, email: 'new.pro@example.com' }, { cookie: me })).json.error.fields.currentPassword).toBeTruthy();
+    expect((await call('PUT', '/me/profile', { ...details, email: 'new.pro@example.com', currentPassword: 'wrong password 9' }, { cookie: me })).status).toBe(400);
+    expect((await call('PUT', '/me/profile', { ...details, email: 'jane@example.com', currentPassword: 'profile password 1' }, { cookie: me })).status).toBe(409);
+    const moved = await call('PUT', '/me/profile', { ...details, email: 'New.Pro@Example.com', currentPassword: 'profile password 1', dateOfBirth: null, eircode: null }, { cookie: me });
+    expect(moved.json.profile).toMatchObject({ email: 'new.pro@example.com', dateOfBirth: null, address: { eircode: null } });
+    expect((await call('POST', '/auth/login', { login: 'new.pro@example.com', password: 'profile password 1' })).status).toBe(200);
+
+    const data = await call('GET', '/me/data', undefined, { cookie: me });
+    expect(data.status).toBe(200);
+    expect(String(data.headers['content-disposition'])).toMatch(/^attachment; filename="st-johns-park-my-data-\d{4}-\d{2}-\d{2}\.json"$/);
+    expect(data.json.account).toMatchObject({ username: 'profiler', email: 'new.pro@example.com', accountType: 'customer' });
+    expect(data.json.bookings.map((b: any) => b.reference)).toContain(ref);
+
+    expect((await call('POST', '/me/delete', { password: 'wrong password 9' }, { cookie: me })).status).toBe(400);
+    expect((await call('POST', '/me/delete', { password: 'profile password 1' }, { cookie: me })).status).toBe(409); // upcoming booking first
+    await call('POST', `/me/bookings/${ref}/cancel`, {}, { cookie: me });
+    expect((await call('POST', '/me/delete', { password: 'profile password 1' }, { cookie: me })).status).toBe(200);
+    expect((await call('GET', '/auth/me', undefined, { cookie: me })).json.user).toBeNull();
+    expect((await call('POST', '/auth/login', { login: 'profiler', password: 'profile password 1' })).status).toBe(401);
+  });
+
   it('blocks cross-site writes', async () => {
     const res = await call('POST', '/bookings', booking(days[2], 'morning'), { origin: 'https://evil.example' });
     expect(res.status).toBe(403);

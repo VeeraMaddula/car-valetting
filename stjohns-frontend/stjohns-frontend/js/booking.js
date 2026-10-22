@@ -901,6 +901,12 @@ currentUser().then((user) => {
     if (value && !inputs[name].value) inputs[name].value = value;
   }
   renderSummary();
+  // The address saved on My profile becomes the collection address, if they ask us to collect the car.
+  api.profile().then(({ profile }) => {
+    const a = profile.address;
+    const address = [a.line1, a.line2, a.town, a.county ? `Co. ${a.county.replace(/^Co\.?\s*/i, '')}` : null, a.eircode].filter(Boolean).join(', ');
+    if (address && !inputs.collectionAddress.value) inputs.collectionAddress.value = address.slice(0, 300);
+  }).catch(() => {});
 });
 
 async function init() {

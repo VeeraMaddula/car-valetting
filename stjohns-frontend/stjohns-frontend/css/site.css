@@ -103,6 +103,20 @@ h1, h2, h3, p { margin: 0; }
 .nav a:hover, .nav a[aria-current='page'] { color: var(--gold-hi); }
 .header-actions { display: flex; align-items: center; gap: 22px; }
 .account-link { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: var(--body); }
+/* Signed in: "My bookings" opens a small menu (My profile, Sign out) on hover or keyboard focus. */
+.account-menu { position: relative; display: inline-flex; }
+.account-menu .account-link::after { content: ''; width: 6px; height: 6px; margin: -3px 0 0 2px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .2s ease; }
+.account-dropdown { position: absolute; top: 100%; right: -14px; z-index: 60; padding-top: 14px; display: none; }
+.account-menu:hover .account-dropdown, .account-menu:focus-within .account-dropdown, .account-menu.is-open .account-dropdown { display: block; }
+.account-menu.is-closed .account-dropdown { display: none; }
+.account-menu:hover .account-link, .account-menu:focus-within .account-link { color: var(--ivory); }
+.account-menu:hover .account-link::after, .account-menu:focus-within .account-link::after { transform: rotate(225deg) translate(-2px, -2px); }
+.account-dropdown-inner { min-width: 210px; padding: 6px; display: flex; flex-direction: column; background: var(--surface-raised); border: 1px solid rgba(201, 162, 74, .35); box-shadow: 0 18px 40px rgba(0, 0, 0, .55); }
+.account-dropdown a, .account-dropdown button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 14px; border: 0; background: none; color: var(--body); font: inherit; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; text-align: left; cursor: pointer; }
+.account-dropdown a:hover, .account-dropdown a:focus-visible, .account-dropdown button:hover, .account-dropdown button:focus-visible { background: rgba(201, 162, 74, .12); color: var(--ivory); outline: none; }
+.account-dropdown button { border-top: 1px solid var(--line); }
+.account-dropdown button:disabled { opacity: .5; cursor: progress; }
+.mobile-signout { padding: 14px 0; border: 0; border-bottom: 1px solid rgba(244, 238, 227, .06); background: none; color: var(--gold-hi); font: inherit; font-size: 14px; letter-spacing: .16em; text-transform: uppercase; text-align: left; cursor: pointer; }
 .nav-toggle { display: none; }
 .mobile-nav { display: none; }
 
@@ -193,7 +207,7 @@ h1, h2, h3, p { margin: 0; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1080px) {
-  .nav, .header-actions .account-link { display: none; }
+  .nav, .header-actions .account-link, .header-actions .account-menu { display: none; }
   .nav-toggle { display: inline-flex; }
   .mobile-nav { display: block; border-top: 1px solid var(--line); background: var(--ink); }
   .mobile-nav[hidden] { display: none !important; }

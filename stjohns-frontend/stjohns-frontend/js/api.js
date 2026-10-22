@@ -80,6 +80,12 @@ export const api = {
   cancelMine: (reference, reason) => request('POST', `/me/bookings/${encodeURIComponent(reference)}/cancel`, { body: { reason: reason || null } }),
   claim: (reference, phone) => request('POST', '/me/bookings/claim', { body: { reference, phone } }),
 
+  /** My profile: personal details, a copy of everything we hold (GDPR access), and account deletion (erasure). */
+  profile: () => request('GET', '/me/profile'),
+  updateProfile: (body) => request('PUT', '/me/profile', { body }),
+  myData: () => request('GET', '/me/data', { blob: true }),
+  deleteAccount: (password) => request('POST', '/me/delete', { body: { password } }),
+
   /** Slideshow, gallery photos and the published before & after pair, as managed in the dashboard. */
   gallery: () => request('GET', '/gallery', { timeout: 6000 }),
   /** Preview a discount code on the booking page (doesn't use it up). */
