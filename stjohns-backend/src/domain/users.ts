@@ -1,7 +1,7 @@
 import { hash, verify } from '@node-rs/argon2';
 import { z } from 'zod';
 import type { Deps } from '../deps.js';
-import { withTx, type Queryable } from '../db/pool.js';
+import { withTx, type Db, type Queryable } from '../db/pool.js';
 import { enqueue } from '../jobs/queue.js';
 import { randomToken, sha256 } from '../lib/crypto.js';
 import { AppError, isUniqueViolation } from '../lib/errors.js';
@@ -128,7 +128,11 @@ export async function login(deps: Deps, raw: unknown): Promise<SessionUser> {
 
 export const SESSION_COOKIE = 'sjp_session';
 
-/** Session lookups are cached briefly so authenticated requests skip a database round trip. */
+/**
+ * Customer session lookups are cached briefly so their requests skip a database round trip. Staff and admin
+ * sessions are never cached: the cache lives in one API process, so a session revoked elsewhere (another API
+ * instance, or the create-admin script) must stop working for the dashboard at once, not 30 seconds later.
+ */
 const sessionCache = new Map<string, { user: SessionUser; expires: number }>();
 const CACHE_MS = 30_000;
 const CACHE_MAX = 5_000;
@@ -164,6 +168,7 @@ export async function sessionUser(db: Queryable, token: string): Promise<Session
     return null;
   }
   const user = mapUser(row);
+  if (user.role !== 'customer') return user;
   if (sessionCache.size >= CACHE_MAX) sessionCache.clear();
   // Never keep a session in the cache past its own expiry.
   sessionCache.set(key, { user, expires: Math.min(Date.now() + CACHE_MS, expiresAt) });
@@ -179,6 +184,26 @@ export async function destroySession(db: Queryable, token: string): Promise<void
 /** Drop cached sessions for a user (after a role change or erasure) so the change applies on their next request. */
 export function forgetUserSessions(userId: string) {
   for (const [key, entry] of sessionCache) if (entry.user.id === userId) sessionCache.delete(key);
+}
+
+/**
+ * Make an existing account an admin, optionally with a new password (the create-admin script). Done in one
+ * transaction that also signs the account out everywhere whenever it gains admin access or a new password, so an
+ * old session can neither outlive the password change nor pick up the new access. Running API processes never
+ * cache staff/admin sessions, and a cached customer session only lasts until its 30-second entry expires; after
+ * that its deleted session fails to load, so it never sees the new role.
+ */
+export async function grantAdmin(db: Db, userId: string, passwordHash: string | null): Promise<{ revokedSessions: number }> {
+  const revokedSessions = await withTx(db, async (c) => {
+    const { rows } = await c.query<{ role: SessionUser['role'] }>('SELECT role FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    if (!rows[0]) throw new AppError('NOT_FOUND', 'Account not found.');
+    await c.query("UPDATE users SET role = 'admin', password_hash = COALESCE($2, password_hash), updated_at = now() WHERE id = $1", [userId, passwordHash]);
+    if (rows[0].role === 'admin' && !passwordHash) return 0; // already an admin, nothing changed
+    const res = await c.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    return res.rowCount ?? 0;
+  });
+  forgetUserSessions(userId);
+  return { revokedSessions };
 }
 
 // ---------- Password reset ----------

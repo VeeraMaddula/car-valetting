@@ -8,7 +8,7 @@ import { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 import { loadConfig } from '../config.js';
 import { createPool } from '../db/pool.js';
-import { hashPassword, registerSchema } from '../domain/users.js';
+import { grantAdmin, hashPassword, registerSchema } from '../domain/users.js';
 import { normalizePhone } from '../lib/phone.js';
 
 const { values } = parseArgs({
@@ -108,11 +108,10 @@ async function main(): Promise<void> {
       console.log(`"${username}" already exists and will be made an admin.`);
       const password = await newPassword(username, true);
       const hash = password ? await hashPassword(password) : null;
-      await pool.query("UPDATE users SET role = 'admin', password_hash = COALESCE($2, password_hash), updated_at = now() WHERE id = $1", [
-        existing.rows[0].id,
-        hash,
-      ]);
-      console.log(`\n"${username}" is now an admin${hash ? ' (password updated)' : ''}.`);
+      // Also signs the account out everywhere, so an old session can't keep going or pick up admin access.
+      const { revokedSessions } = await grantAdmin(pool, existing.rows[0].id, hash);
+      const signedOut = revokedSessions ? ` Signed out of ${revokedSessions} existing session${revokedSessions === 1 ? '' : 's'}.` : '';
+      console.log(`\n"${username}" is now an admin${hash ? ' (password updated)' : ''}.${signedOut}`);
       return;
     }
 

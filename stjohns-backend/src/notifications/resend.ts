@@ -1,8 +1,26 @@
 import type { Config } from '../config.js';
 import { PermanentProviderError } from '../lib/errors.js';
 
+export type EmailPurpose = 'bookings' | 'reminders' | 'payments' | 'accounts';
+
+/** Sender address for a purpose: bookings@ for booking lifecycle and owner alerts, reminders@, payments@, accounts@. */
+export function fromFor(config: Config, purpose: EmailPurpose): string {
+  switch (purpose) {
+    case 'reminders':
+      return config.EMAIL_FROM_REMINDERS ?? config.EMAIL_FROM;
+    case 'payments':
+      return config.EMAIL_FROM_PAYMENTS ?? config.EMAIL_FROM;
+    case 'accounts':
+      return config.EMAIL_FROM_ACCOUNTS ?? config.EMAIL_FROM;
+    default:
+      return config.EMAIL_FROM;
+  }
+}
+
 export interface EmailMessage {
   to: string;
+  /** Sender; defaults to EMAIL_FROM. Use fromFor() to pick by purpose. */
+  from?: string;
   subject: string;
   html: string;
   text: string;
@@ -22,7 +40,7 @@ export async function sendEmail(config: Config, msg: EmailMessage, idempotencyKe
       'Idempotency-Key': idempotencyKey,
     },
     body: JSON.stringify({
-      from: config.EMAIL_FROM,
+      from: msg.from ?? config.EMAIL_FROM,
       to: [msg.to],
       subject: msg.subject,
       html: msg.html,

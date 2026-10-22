@@ -278,6 +278,19 @@ describe('sessions and ids', () => {
     expect(calls()).toBe(1);
   });
 
+  it('never caches staff or admin sessions, so a session revoked by another process stops at once', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-22T12:00:00Z'));
+    for (const role of ['staff', 'admin']) {
+      // The second lookup finds nothing: the create-admin script (another process) deleted the session meanwhile.
+      const { db, calls } = fakeDb([[{ ...sessionRow('2026-11-20T12:00:00Z'), role }], []]);
+      const token = `${role[0]}`.repeat(43);
+      expect(await sessionUser(db, token)).toMatchObject({ role });
+      expect(await sessionUser(db, token)).toBeNull();
+      expect(calls()).toBe(2);
+    }
+  });
+
   it('accepts only well-formed UUIDs', () => {
     expect(isUuid('9f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a6b')).toBe(true);
     expect(isUuid('9F1C2A3B-4D5E-4F60-8A7B-1C2D3E4F5A6B')).toBe(true);

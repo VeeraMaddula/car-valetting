@@ -10,6 +10,7 @@ export type NotifyTemplate =
   | 'deposit_requested'
   | 'deposit_paid'
   | 'deposit_refunded'
+  | 'deposit_refund_failed'
   | 'completed'
   | 'review_request';
 
@@ -19,7 +20,8 @@ export type JobInput =
   | { kind: 'auth.password_reset'; payload: { userId: string; token: string }; runAt?: Date }
   | { kind: 'deposit.link'; payload: { bookingId: string }; runAt?: Date }
   | { kind: 'deposit.expire'; payload: { bookingId: string; sessionId: string }; runAt?: Date }
-  | { kind: 'deposit.refund'; payload: { bookingId: string }; runAt?: Date }
+  /** `check` counts follow-up checks on a refund Stripe still has pending. */
+  | { kind: 'deposit.refund'; payload: { bookingId: string; check?: number }; runAt?: Date }
   | { kind: 'owner.daily_summary'; payload: { date: string }; runAt?: Date }
   | { kind: 'team.invite'; payload: { inviteId: string; token: string }; runAt?: Date };
 

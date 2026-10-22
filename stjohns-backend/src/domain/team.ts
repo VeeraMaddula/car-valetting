@@ -72,17 +72,18 @@ export const acceptInviteSchema = z.object({
 export async function acceptInvite(deps: Deps, me: SessionUser, raw: unknown): Promise<SessionUser> {
   const { token } = parse(acceptInviteSchema, raw);
   const role = await withTx(deps.db, async (c) => {
+    // Locks are always taken users first, then invites (removeMember does the same), so the two can't deadlock.
+    // Use the account as it is now, not the session's copy, and lock it so a concurrent role change waits.
+    const current = await c.query<{ email: string; role: SessionUser['role'] }>('SELECT email, role FROM users WHERE id = $1 FOR UPDATE', [me.id]);
+    const account = current.rows[0];
+    if (!account) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.');
+    // Read after the account lock: if a removal deleted this invite while we waited, it's gone now.
     const { rows } = await c.query<{ id: string; email: string; role: 'staff' | 'admin' }>(
       'SELECT id, email, role FROM team_invites WHERE token_hash = $1 AND accepted_at IS NULL AND expires_at > now() FOR UPDATE',
       [sha256(token)],
     );
     const invite = rows[0];
     if (!invite) throw new AppError('VALIDATION_FAILED', 'This invite link is invalid or has expired. Ask for a new one.', { token: 'Expired' });
-    // Use the account as it is now, not the (up to 30 s old) session copy, and lock it so a concurrent role change
-    // waits. Lock order (invite, then this user) can't cycle with removeMember (all admins, then the target).
-    const current = await c.query<{ email: string; role: SessionUser['role'] }>('SELECT email, role FROM users WHERE id = $1 FOR UPDATE', [me.id]);
-    const account = current.rows[0];
-    if (!account) throw new AppError('UNAUTHENTICATED', 'Please sign in to continue.');
     if (invite.email !== account.email.toLowerCase()) {
       throw new AppError('FORBIDDEN', `This invite was sent to ${invite.email}. Sign in with that account to accept it.`);
     }
@@ -101,7 +102,8 @@ export async function removeMember(deps: Deps, userId: string, me: SessionUser):
   if (!isUuid(userId)) throw new AppError('NOT_FOUND', 'Team member not found.');
   if (userId === me.id) throw new AppError('FORBIDDEN', "You can't remove your own access.");
   await withTx(deps.db, async (c) => {
-    // Lock the full-access logins in a fixed order first, so two owners removing each other can't deadlock.
+    // Lock order: users first (the full-access logins in id order, so two owners removing each other can't
+    // deadlock, then the target), invites last, the same users-before-invites order as acceptInvite.
     const admins = await c.query<{ id: string }>("SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE");
     const { rows } = await c.query<{ role: string }>("SELECT role FROM users WHERE id = $1 AND role IN ('staff', 'admin') FOR UPDATE", [userId]);
     if (!rows[0]) throw new AppError('NOT_FOUND', 'Team member not found.');

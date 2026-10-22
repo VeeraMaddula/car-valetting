@@ -284,6 +284,8 @@ export function customerEmail(template: NotifyTemplate, b: BookingRecord, config
           outro: [`Not happy with something? Reply to this email or call ${config.BUSINESS_PHONE} and we'll put it right.`],
         }),
       };
+    case 'deposit_refund_failed':
+      return null; // for the owner only
   }
 }
 
@@ -323,6 +325,24 @@ export function ownerEmail(template: NotifyTemplate, b: BookingRecord, config: C
         intro: [`${b.customerName} has paid the deposit online. Balance due on the day.`],
         rows,
         cta: call,
+      }),
+    };
+  }
+  if (template === 'deposit_refund_failed') {
+    const dashboard = config.STRIPE_SECRET_KEY?.startsWith('sk_test_') ? 'https://dashboard.stripe.com/test' : 'https://dashboard.stripe.com';
+    return {
+      subject: `Deposit refund failed: ${b.customerName} (${ref})`,
+      attachCalendar: false,
+      ...layout(config, {
+        preheader: `Stripe couldn't refund the €${config.DEPOSIT_AMOUNT_EUR} deposit for ${ref}.`,
+        eyebrow: 'Refund failed',
+        heading: `The €${config.DEPOSIT_AMOUNT_EUR} deposit for ${ref} wasn't refunded`,
+        intro: [
+          `Stripe couldn't refund ${b.customerName}'s deposit, so it still shows as paid and they haven't been told it was refunded.`,
+          'Try the refund again from the booking in your dashboard, or refund it directly in Stripe.',
+        ],
+        rows,
+        cta: b.depositPaymentIntentId ? { label: 'Open the payment in Stripe', url: `${dashboard}/payments/${b.depositPaymentIntentId}` } : call,
       }),
     };
   }
@@ -373,6 +393,7 @@ export function customerSms(template: NotifyTemplate, b: BookingRecord, config: 
       return `St Johns Park: your €${config.DEPOSIT_AMOUNT_EUR} deposit for ${ref} has been refunded. Allow 5–10 working days. Questions? ${config.BUSINESS_PHONE}`;
     case 'completed':
     case 'review_request':
+    case 'deposit_refund_failed':
       return null;
   }
 }
@@ -389,6 +410,9 @@ export function ownerSms(template: NotifyTemplate, b: BookingRecord): string | n
   }
   if (template === 'deposit_paid') {
     return `Deposit paid: ${ref}, ${slotShort(b)}. ${b.customerName}`;
+  }
+  if (template === 'deposit_refund_failed') {
+    return `Deposit refund FAILED: ${ref}, ${b.customerName}. It still shows as paid: try again from the dashboard or refund it in Stripe.`;
   }
   return null;
 }

@@ -46,9 +46,16 @@ const schema = z.object({
   RESEND_API_KEY: optionalString,
   EMAIL_FROM: z.string().default('St Johns Park Valeting <bookings@example.com>'),
   EMAIL_REPLY_TO: optionalString,
+  // Optional senders by purpose; each falls back to EMAIL_FROM. Lets the business use bookings@, reminders@,
+  // payments@ and accounts@ addresses while keeping one verified domain in Resend.
+  EMAIL_FROM_REMINDERS: optionalString,
+  EMAIL_FROM_PAYMENTS: optionalString,
+  EMAIL_FROM_ACCOUNTS: optionalString,
 
   SENDMODE_ACCESS_KEY: optionalString,
-  SENDMODE_SENDER_ID: z.string().max(11).default('StJohnsPark'),
+  // Must match the Sender ID registered in ComReg's Sender ID Registry (approved for Sendmode), or Irish networks
+  // block the texts or mark them "Likely SCAM".
+  SENDMODE_SENDER_ID: z.string().max(11).default('SJPCarValet'),
   SENDMODE_NUMBER_FORMAT: z.enum(['international', 'national']).default('international'),
 
   GOOGLE_SERVICE_ACCOUNT_JSON: optionalString,

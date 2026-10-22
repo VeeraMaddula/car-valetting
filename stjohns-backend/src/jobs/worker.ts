@@ -15,7 +15,7 @@ import { isMobileNumber, normalizePhone } from '../lib/phone.js';
 import { formatReference } from '../lib/reference.js';
 import { addDays, todayInZone, zonedTimeToUtc } from '../lib/time.js';
 import { isGoogleCalendarConfigured, upsertCalendarEvent, type CalendarEventBody } from '../notifications/gcal.js';
-import { sendEmail, type SendResult } from '../notifications/resend.js';
+import { fromFor, sendEmail, type SendResult } from '../notifications/resend.js';
 import { sendSms } from '../notifications/sendmode.js';
 import {
   customerEmail,
@@ -27,7 +27,7 @@ import {
   teamInviteEmail,
   type RenderedEmail,
 } from '../notifications/templates.js';
-import { createDepositLink, expireDepositLink, refundDepositForBooking } from '../domain/deposits.js';
+import { createDepositLink, expireDepositLink, refundDepositForBooking, refundGaveUp } from '../domain/deposits.js';
 import type { JobInput, NotifyTemplate } from './queue.js';
 
 interface ClaimedJob {
@@ -119,7 +119,10 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
           if (template === 'deposit_requested' && config.stripeEnabled && !b.depositPayUrl) return 'skipped: no payment link yet';
           const email = customerEmail(template, b, config, { reviewUrl: site.messages.googleReviewUrl });
           if (!email) return 'skipped: no template';
-          return describe(await sendEmail(config, { to: b.customerEmail, ...email, attachments: withCalendar(config, b, email) }, job.id));
+          const purpose = template === 'reminder' || template === 'review_request' ? 'reminders' : template.startsWith('deposit_') ? 'payments' : 'bookings';
+          return describe(
+            await sendEmail(config, { to: b.customerEmail, from: fromFor(config, purpose), ...email, attachments: withCalendar(config, b, email) }, job.id),
+          );
         }
         case 'customer_sms': {
           if (template === 'deposit_requested' && config.stripeEnabled && !b.depositPayUrl) return 'skipped: no payment link yet';
@@ -161,13 +164,13 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       return expireDepositLink(deps, job.payload.bookingId, job.payload.sessionId);
     case 'deposit.refund':
       if (!config.stripeEnabled) return 'skipped: Stripe not configured';
-      return refundDepositForBooking(deps, job.payload.bookingId);
+      return refundDepositForBooking(deps, job.payload.bookingId, Number(job.payload.check ?? 0));
     case 'auth.password_reset': {
       const { userId, token } = job.payload as { userId: string; token: string };
       const { rows } = await db.query<{ email: string; full_name: string }>('SELECT email, full_name FROM users WHERE id = $1', [userId]);
       if (!rows[0] || !token) return 'skipped: user not found';
       const link = `${config.PUBLIC_SITE_URL.replace(/\/$/, '')}/reset-password.html?token=${encodeURIComponent(token)}`;
-      return describe(await sendEmail(config, { to: rows[0].email, ...passwordResetEmail(config, rows[0].full_name, link) }, job.id));
+      return describe(await sendEmail(config, { to: rows[0].email, from: fromFor(config, 'accounts'), ...passwordResetEmail(config, rows[0].full_name, link) }, job.id));
     }
     case 'owner.daily_summary': {
       const { site } = await deps.settings.get();
@@ -202,7 +205,7 @@ export async function handleJob(deps: Deps, job: ClaimedJob): Promise<string> {
       if (!invite || !token) return 'skipped: invite no longer open';
       const link = siteUrl(config, `account.html?invite=${encodeURIComponent(token)}`);
       const email = teamInviteEmail(config, invite.inviter ?? config.BUSINESS_NAME, invite.role, link, invite.has_account);
-      return describe(await sendEmail(config, { to: invite.email, ...email }, job.id));
+      return describe(await sendEmail(config, { to: invite.email, from: fromFor(config, 'accounts'), ...email }, job.id));
     }
     default:
       throw new PermanentProviderError(`unknown job kind ${String(job.kind)}`);
@@ -302,6 +305,10 @@ export class JobWorker {
       if (permanent) {
         await db.query(`UPDATE jobs SET status = 'failed', locked_until = NULL, last_error = $2, updated_at = now(), ${SCRUB} WHERE id = $1`, [job.id, message]);
         this.log.error({ jobId: job.id, kind: job.kind, err: message }, 'job failed permanently');
+        // A refund that will never be made must not stay "requested": record it as failed and tell the owner.
+        if (job.kind === 'deposit.refund') {
+          await refundGaveUp(this.deps, job.payload.bookingId, message).catch((e: unknown) => this.log.error({ err: e, jobId: job.id }, 'could not record the failed refund'));
+        }
       } else {
         await db.query("UPDATE jobs SET status = 'pending', locked_until = NULL, run_at = $2, last_error = $3, updated_at = now() WHERE id = $1", [
           job.id,

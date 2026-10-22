@@ -206,6 +206,7 @@ describe('notification templates', () => {
     depositPaymentIntentId: null,
     depositPaidAt: null,
     depositRefundId: null,
+    depositRefundStatus: null,
     servicePriceFrom: true,
     vehicleSize: 'large',
     priceCents: 10500,
@@ -267,5 +268,24 @@ describe('infrastructure helpers', () => {
     expect(loadConfig({ ...prod, DATABASE_URL: `${host}?sslmode=verify-full` }).isProduction).toBe(true);
     // Local development may connect without TLS.
     expect(loadConfig({ ...prod, NODE_ENV: 'development', DATABASE_URL: 'postgresql://root@localhost:26257/stjohns?sslmode=disable' }).isProduction).toBe(false);
+  });
+});
+
+describe('email sender by purpose', async () => {
+  const { fromFor } = await import('../src/notifications/resend.js');
+  const { loadConfig } = await import('../src/config.js');
+  const base = { DATABASE_URL: 'postgresql://unused', PUBLIC_SITE_URL: 'https://www.example.ie', PUBLIC_API_URL: 'https://api.example.ie', EMAIL_FROM: 'Biz <bookings@example.ie>' };
+
+  it('falls back to EMAIL_FROM when the purpose-specific sender is not set', () => {
+    const config = loadConfig(base);
+    for (const p of ['bookings', 'reminders', 'payments', 'accounts'] as const) expect(fromFor(config, p)).toBe('Biz <bookings@example.ie>');
+  });
+
+  it('uses the purpose-specific sender when set', () => {
+    const config = loadConfig({ ...base, EMAIL_FROM_REMINDERS: 'Biz <reminders@example.ie>', EMAIL_FROM_PAYMENTS: 'Biz <payments@example.ie>', EMAIL_FROM_ACCOUNTS: 'Biz <accounts@example.ie>' });
+    expect(fromFor(config, 'bookings')).toBe('Biz <bookings@example.ie>');
+    expect(fromFor(config, 'reminders')).toBe('Biz <reminders@example.ie>');
+    expect(fromFor(config, 'payments')).toBe('Biz <payments@example.ie>');
+    expect(fromFor(config, 'accounts')).toBe('Biz <accounts@example.ie>');
   });
 });

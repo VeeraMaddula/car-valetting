@@ -62,28 +62,33 @@ try {
   if (outcome === 'created') console.log(`Created database ${dbName}.`);
 
   const pool = createPool(config);
-  console.log(`Migrating ${dbName} on ${target.hostname}…`);
-  await migrate(pool, (msg) => console.log(`  ${msg}`));
+  try {
+    console.log(`Migrating ${dbName} on ${target.hostname}…`);
+    await migrate(pool, (msg) => console.log(`  ${msg}`));
 
-  const version = String((await pool.query('SELECT version() AS v')).rows[0].v).split(' on ')[0].split(' (')[0];
-  const tables = Number((await pool.query("SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'public'")).rows[0].n);
-  const services = (await pool.query('SELECT code, name, price_cents FROM services WHERE active ORDER BY sort')).rows as { code: string; name: string; price_cents: number | null }[];
-  const times: number[] = [];
-  for (let i = 0; i < 10; i++) {
-    const t0 = performance.now();
-    await pool.query('SELECT 1');
-    times.push(performance.now() - t0);
+    const version = String((await pool.query('SELECT version() AS v')).rows[0].v).split(' on ')[0].split(' (')[0];
+    const tables = Number((await pool.query("SELECT count(*) AS n FROM information_schema.tables WHERE table_schema = 'public'")).rows[0].n);
+    const services = (await pool.query('SELECT code, name, price_cents FROM services WHERE active ORDER BY sort')).rows as { code: string; name: string; price_cents: number | null }[];
+    const times: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const t0 = performance.now();
+      await pool.query('SELECT 1');
+      times.push(performance.now() - t0);
+    }
+    times.sort((a, b) => a - b);
+    console.log('');
+    console.log(`  Database   ${dbName} (${tables} tables)`);
+    console.log(`  Server     ${version}`);
+    console.log(`  Host       ${target.hostname}`);
+    console.log(`  TLS        sslmode=${sslmode}`);
+    console.log(`  Services   ${services.map((s) => `${s.name}${s.price_cents === null ? '' : ` €${s.price_cents / 100}`}`).join(' · ')}`);
+    console.log(`  Round trip ${times[4].toFixed(1)} ms median from this machine (host the API in the same region as the database)`);
+    if (!isLocal && sslmode !== 'verify-full') console.warn('\n  WARNING: use sslmode=verify-full for a cloud database.');
+  } finally {
+    // Close the pool whatever happened, or a failed migration leaves the command hanging on open connections.
+    // A failure to close mustn't hide the original error.
+    await pool.end().catch(() => undefined);
   }
-  times.sort((a, b) => a - b);
-  console.log('');
-  console.log(`  Database   ${dbName} (${tables} tables)`);
-  console.log(`  Server     ${version}`);
-  console.log(`  Host       ${target.hostname}`);
-  console.log(`  TLS        sslmode=${sslmode}`);
-  console.log(`  Services   ${services.map((s) => `${s.name}${s.price_cents === null ? '' : ` €${s.price_cents / 100}`}`).join(' · ')}`);
-  console.log(`  Round trip ${times[4].toFixed(1)} ms median from this machine (host the API in the same region as the database)`);
-  if (!isLocal && sslmode !== 'verify-full') console.warn('\n  WARNING: use sslmode=verify-full for a cloud database.');
-  await pool.end();
   console.log('\nDatabase ready.');
 } catch (err) {
   console.error(`\nDatabase setup failed: ${explain(err)}`);

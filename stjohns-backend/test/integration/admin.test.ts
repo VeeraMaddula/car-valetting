@@ -9,7 +9,7 @@ import { migrate } from '../../src/db/migrate.js';
 import { createPool } from '../../src/db/pool.js';
 import type { Deps } from '../../src/deps.js';
 import { SettingsCache } from '../../src/domain/settings.js';
-import { hashPassword } from '../../src/domain/users.js';
+import { grantAdmin, hashPassword } from '../../src/domain/users.js';
 import { JobWorker } from '../../src/jobs/worker.js';
 import { addDays, todayInZone } from '../../src/lib/time.js';
 import { createTestDatabase, TEST_DATABASE_URL, type TestDatabase } from './test-db.js';
@@ -644,6 +644,87 @@ suite('admin dashboard API on PostgreSQL', () => {
     const relogin = await call('POST', '/auth/login', { login: 'late', password: 'late-password-1' });
     expect((await call('POST', '/auth/invites/accept', { token: lateToken }, sessionCookie(relogin))).status).toBe(400);
     expect((await call('GET', '/admin/badges', undefined, lateCookie)).status).toBe(401);
+  });
+
+  it('signs an account out everywhere when create-admin promotes it or changes its password (finding 9)', async () => {
+    const reg = await call('POST', '/auth/register', { username: 'promoted', email: 'promoted@example.com', password: 'promoted-password-1', fullName: 'Pro Moted', phone: '083 555 0104' });
+    const oldCookie = sessionCookie(reg);
+    expect((await call('GET', '/auth/me', undefined, oldCookie)).json.user.role).toBe('customer');
+
+    expect(await grantAdmin(pool, reg.json.user.id, await hashPassword('brand-new-password-2'))).toEqual({ revokedSessions: 1 });
+    // The old session is gone, so it never picks up admin access.
+    expect((await call('GET', '/auth/me', undefined, oldCookie)).json.user).toBeNull();
+    expect((await call('GET', '/admin/pricing', undefined, oldCookie)).status).toBe(401);
+    expect((await call('POST', '/auth/login', { login: 'promoted', password: 'promoted-password-1' })).status).toBe(401);
+    const fresh = await call('POST', '/auth/login', { login: 'promoted', password: 'brand-new-password-2' });
+    expect(fresh.status).toBe(200);
+    expect((await call('GET', '/admin/pricing', undefined, sessionCookie(fresh))).status).toBe(200);
+
+    // Running it again for an admin without a new password changes nothing and keeps them signed in.
+    expect(await grantAdmin(pool, reg.json.user.id, null)).toEqual({ revokedSessions: 0 });
+    expect((await call('GET', '/admin/pricing', undefined, sessionCookie(fresh))).status).toBe(200);
+  });
+
+  it('stops a staff session at once when another process revokes it (finding 9)', async () => {
+    const reg = await call('POST', '/auth/register', { username: 'otherstaff', email: 'otherstaff@example.com', password: 'otherstaff-password-1', fullName: 'Other Staff', phone: '083 555 0105' });
+    await pool.query("UPDATE users SET role = 'staff' WHERE id = $1", [reg.json.user.id]);
+    const cookie = sessionCookie(await call('POST', '/auth/login', { login: 'otherstaff', password: 'otherstaff-password-1' }));
+    expect((await call('GET', '/admin/badges', undefined, cookie)).status).toBe(200);
+    // Revoked outside this API process (the create-admin script, another instance): nothing clears this process's cache.
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [reg.json.user.id]);
+    expect((await call('GET', '/admin/badges', undefined, cookie)).status).toBe(401);
+  });
+
+  it('lets an invite acceptance queue behind a removal instead of deadlocking with it (finding 11)', async () => {
+    const reg = await call('POST', '/auth/register', { username: 'racer', email: 'racer@example.com', password: 'racer-password-1', fullName: 'Ray Sir', phone: '083 555 0106' });
+    const racerId: string = reg.json.user.id;
+    const racerCookie = sessionCookie(reg);
+    await call('POST', '/admin/team/invites', { email: 'racer@example.com', access: 'bookings' }, 'owner');
+    const token = (
+      await pool.query(
+        "SELECT j.payload->>'token' AS token FROM jobs j JOIN team_invites i ON i.id = (j.payload->>'inviteId')::UUID WHERE j.kind = 'team.invite' AND i.email = 'racer@example.com'",
+      )
+    ).rows[0].token as string;
+    await pool.query("UPDATE users SET role = 'staff' WHERE id = $1", [racerId]); // given access another way; the invite is still open
+
+    // A removal part-way through (removeMember's statements, paused): it holds the user rows...
+    const removal = new pg.Client({ connectionString: testDb.url, application_name: 'removal-under-test' });
+    await removal.connect();
+    try {
+      const removalPid: number = (await removal.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      await removal.query('BEGIN');
+      await removal.query("SELECT id FROM users WHERE role = 'admin' ORDER BY id FOR UPDATE");
+      await removal.query("SELECT role FROM users WHERE id = $1 AND role IN ('staff', 'admin') FOR UPDATE", [racerId]);
+
+      // ...when they open the invite link. Acceptance must wait for the user row first, holding no invite lock.
+      const accepting = call('POST', '/auth/invites/accept', { token }, racerCookie);
+      const waiting = async () =>
+        (await pool.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> $1", [removalPid]))
+          .rows[0].n > 0;
+      for (let i = 0; i < 100 && !(await waiting()); i++) await new Promise((r) => setTimeout(r, 50));
+      expect(await waiting()).toBe(true);
+      const inviteLocks = await pool.query(
+        `SELECT count(*)::int AS n FROM pg_locks
+         WHERE database = (SELECT oid FROM pg_database WHERE datname = current_database())
+           AND relation = 'team_invites'::regclass AND pid <> $1 AND pid <> pg_backend_pid()`,
+        [removalPid],
+      );
+      expect(inviteLocks.rows[0].n).toBe(0);
+
+      // The removal finishes, cancelling the open invite (it would wait on acceptance here if acceptance held it).
+      await removal.query("UPDATE users SET role = 'customer', updated_at = now() WHERE id = $1", [racerId]);
+      await removal.query('DELETE FROM sessions WHERE user_id = $1', [racerId]);
+      await removal.query('DELETE FROM team_invites WHERE accepted_at IS NULL AND email = (SELECT email FROM users WHERE id = $1)', [racerId]);
+      await removal.query('COMMIT');
+
+      // Acceptance then finds the invite gone: no deadlock, and no access handed back.
+      const res = await accepting;
+      expect(res.status).toBe(400);
+      expect((await pool.query('SELECT role FROM users WHERE id = $1', [racerId])).rows[0].role).toBe('customer');
+    } finally {
+      await removal.query('ROLLBACK').catch(() => undefined);
+      await removal.end();
+    }
   });
 
   it('delivers every queued job (skipping providers that are not configured) without failures', async () => {

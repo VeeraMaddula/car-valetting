@@ -135,7 +135,10 @@ Using one domain for both keeps the login cookie first-party, which Safari on iP
 ### 5. Sendmode (SMS)
 
 1. At https://www.sendmode.com create an account and an **API access key** → `SENDMODE_ACCESS_KEY`.
-2. Set `SENDMODE_SENDER_ID` (up to 11 characters, e.g. `StJohnsPark`).
+2. Set `SENDMODE_SENDER_ID=SJPCarValet` (the default). In Ireland the sender name must be registered in ComReg's
+   Sender ID Registry with Sendmode authorised as the SMS provider (OPA), or networks block the texts or label them
+   "Likely SCAM". `SJPCarValet` is registered (SIDR-18795, approved 21/10/2026, OPA Sendmode). To use a different name,
+   register it there first, then match it here exactly, including capitals.
 3. Send one test booking to your own mobile. If Sendmode rejects the number format, set `SENDMODE_NUMBER_FORMAT=national`.
 
 SMS go only to mobile numbers; landlines are skipped automatically.
@@ -184,17 +187,27 @@ to the owner's iPhone, they appear there too.
 2. **Developers › API keys** → copy the **Secret key** → `STRIPE_SECRET_KEY`. Use the `sk_test_…` key until launch.
 3. **Developers › Webhooks › Add endpoint** → URL `https://api.yourdomain.ie/api/v1/webhooks/stripe` → select the events
    `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
-   `checkout.session.expired` and `charge.refunded` → copy the **Signing secret** → `STRIPE_WEBHOOK_SECRET`.
+   `checkout.session.expired`, `charge.refunded`, `refund.created`, `refund.updated` and `refund.failed` → copy the
+   **Signing secret** → `STRIPE_WEBHOOK_SECRET`. (Already set up? Add the three `refund.*` events to the existing endpoint.)
 4. **Settings › Payment methods**: cards are on by default; turn on Apple Pay / Google Pay (Checkout shows them automatically).
    **Settings › Public details**: set the statement descriptor so the card statement reads e.g. `ST JOHNS PARK VALET`.
 5. Redeploy with both variables set. `GET /api/v1/config` now reports `booking.onlineDeposit: true` and the website shows
    *Pay deposit* buttons on the tracking and My bookings pages.
 
-How it works: `PATCH /admin/bookings/:ref {depositStatus:"requested"}` queues a `deposit.link` job. The worker creates a
-Checkout Session (idempotent per booking), stores the URL, and only then queues the "pay your deposit" email + SMS. Stripe
-calls the webhook when the customer pays; the handler is idempotent on Stripe's event id, so retries never double-count.
-`PATCH … {depositStatus:"refunded"}` or any cancellation of a paid booking queues `deposit.refund`. A refund done in the Stripe
-dashboard is mirrored by the `charge.refunded` event. Money in/out is recorded in the `payments` table.
+How it works: `PATCH /admin/bookings/:ref {depositStatus:"requested"}` queues a `deposit.link` job. The worker saves the
+exact Checkout request (idempotency key and parameters) on the booking, creates the session from it, stores the URL, and
+only then queues the "pay your deposit" email + SMS; a retry resends the saved request, so Stripe hands back the same
+session instead of a second one. Stripe calls the webhook when the customer pays; the handler is idempotent on Stripe's
+event id, so retries never double-count. Expiring a link on cancellation fails the job (and keeps the link recorded) if
+Stripe can't confirm the link is dead, e.g. a revoked API key.
+
+Refunds: `PATCH … {depositStatus:"refunded"}` or any cancellation of a paid booking queues `deposit.refund`. The deposit
+shows "refund requested/pending" (`deposit.refundStatus` in the admin API) and only becomes `refunded`, with the
+customer's "refunded" email/SMS, once Stripe says the refund **succeeded**: in the worker's reply, a `refund.*` webhook,
+or a follow-up check the worker schedules while Stripe has it pending. A refund that fails puts the deposit back to paid
+and emails/texts the owner; refunding again from the dashboard makes a fresh attempt. Refunds done in the Stripe
+dashboard are picked up from their `refund.*` events (or `charge.refunded`). Money in/out is recorded in the `payments`
+table, one row per Stripe payment or refund with its current status.
 
 Local testing with the Stripe CLI (https://docs.stripe.com/stripe-cli):
 

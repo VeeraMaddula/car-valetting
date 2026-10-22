@@ -19,6 +19,8 @@ import type { SiteSettings } from './site-settings.js';
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 export type DepositStatus = 'not_requested' | 'requested' | 'paid' | 'refunded' | 'waived';
+/** Where a deposit refund stands: 'requested' until Stripe answers, then Stripe's own refund status. */
+export type DepositRefundStatus = 'requested' | 'pending' | 'requires_action' | 'succeeded' | 'failed' | 'canceled';
 export const ACTIVE_STATUSES: readonly BookingStatus[] = ['pending', 'confirmed'];
 
 export interface BookingRecord {
@@ -47,6 +49,7 @@ export interface BookingRecord {
   depositPaymentIntentId: string | null;
   depositPaidAt: Date | null;
   depositRefundId: string | null;
+  depositRefundStatus: DepositRefundStatus | null;
   /** The service is priced "from" (final price can vary). */
   servicePriceFrom: boolean;
   vehicleSize: VehicleSize | null;
@@ -82,7 +85,7 @@ const SELECT_BOOKING = `
          p.label AS period_label, p.start_time, p.end_time, b.status, b.customer_name, b.customer_phone,
          b.customer_email, b.vehicle, b.handover, b.collection_address, b.notes, b.deposit_status,
          b.deposit_session_id, b.deposit_pay_url, b.deposit_link_expires_at, b.deposit_payment_intent_id,
-         b.deposit_paid_at, b.deposit_refund_id,
+         b.deposit_paid_at, b.deposit_refund_id, b.deposit_refund_status,
          b.calendar_token, b.sequence, b.google_event_id, b.cancelled_at, b.cancel_reason, b.created_at, b.updated_at
   FROM bookings b
   JOIN services s ON s.code = b.service_code
@@ -116,6 +119,7 @@ function mapRow(r: any): BookingRecord {
     depositPaymentIntentId: r.deposit_payment_intent_id ?? null,
     depositPaidAt: r.deposit_paid_at ?? null,
     depositRefundId: r.deposit_refund_id ?? null,
+    depositRefundStatus: r.deposit_refund_status ?? null,
     servicePriceFrom: r.service_price_from ?? true,
     vehicleSize: r.vehicle_size ?? null,
     priceCents: r.price_cents === null || r.price_cents === undefined ? null : Number(r.price_cents),
@@ -298,8 +302,10 @@ export function toCustomerView(config: Config, b: BookingRecord, opts: ViewOptio
 }
 
 export function toAdminView(config: Config, b: BookingRecord) {
+  const view = toCustomerView(config, b);
   return {
-    ...toCustomerView(config, b),
+    ...view,
+    deposit: { ...view.deposit, refundStatus: b.depositRefundStatus },
     id: b.id,
     phone: displayPhone(b.customerPhone),
     phoneE164: b.customerPhone,
@@ -748,19 +754,37 @@ export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw
     if (priceChanged && finalCents !== b.finalPriceCents) {
       events.push({ type: 'price_set', note: finalCents === null ? 'Charged amount cleared' : `Charged €${(finalCents / 100).toFixed(2)}` });
     }
+    let depositStatus = input.depositStatus ?? null;
+    let refundRequested = false;
     if (input.depositStatus && input.depositStatus !== b.depositStatus) {
       if (input.depositStatus === 'refunded' && b.depositStatus !== 'paid') {
         throw new AppError('INVALID_TRANSITION', 'Only a paid deposit can be refunded.');
       }
-      if (input.depositStatus !== 'not_requested') events.push({ type: `deposit_${input.depositStatus}`, note: null });
-      if (input.depositStatus === 'requested') {
-        // With Stripe on, the worker creates the Checkout link first and then sends the "pay your deposit" messages.
-        // Without it, the messages go straight out with DEPOSIT_INSTRUCTIONS.
-        if (deps.config.stripeEnabled) jobs.push({ kind: 'deposit.link', payload: { bookingId: b.id } });
-        else jobs.push(...customerJobs(b, 'deposit_requested'));
-      }
       if (input.depositStatus === 'refunded' && deps.config.stripeEnabled && b.depositPaymentIntentId) {
+        // An online payment: ask Stripe to refund it. The deposit stays "paid" until Stripe confirms the refund;
+        // the worker (or the refund webhook) marks it refunded then and tells the customer.
+        // In progress: Stripe has the refund, or it was requested and the worker is still on it.
+        const queued =
+          b.depositRefundStatus === 'requested' &&
+          Boolean(
+            (await c.query("SELECT 1 FROM jobs WHERE kind = 'deposit.refund' AND status IN ('pending', 'running') AND payload->>'bookingId' = $1 LIMIT 1", [b.id]))
+              .rowCount,
+          );
+        if (queued || b.depositRefundStatus === 'pending' || b.depositRefundStatus === 'requires_action') {
+          throw new AppError('INVALID_TRANSITION', 'A refund for this deposit is already in progress.');
+        }
+        depositStatus = null;
+        refundRequested = true;
+        events.push({ type: 'deposit_refund_requested', note: null });
         jobs.push({ kind: 'deposit.refund', payload: { bookingId: b.id } });
+      } else {
+        if (input.depositStatus !== 'not_requested') events.push({ type: `deposit_${input.depositStatus}`, note: null });
+        if (input.depositStatus === 'requested') {
+          // With Stripe on, the worker creates the Checkout link first and then sends the "pay your deposit" messages.
+          // Without it, the messages go straight out with DEPOSIT_INSTRUCTIONS.
+          if (deps.config.stripeEnabled) jobs.push({ kind: 'deposit.link', payload: { bookingId: b.id } });
+          else jobs.push(...customerJobs(b, 'deposit_requested'));
+        }
       }
     }
     if (input.note && !(statusChanged && input.status === 'cancelled')) events.push({ type: 'note', note: input.note });
@@ -772,10 +796,11 @@ export async function adminUpdateBooking(deps: Deps, referenceInput: string, raw
          cancelled_at = CASE WHEN $2 = 'cancelled' THEN now() ELSE cancelled_at END,
          cancel_reason = CASE WHEN $2 = 'cancelled' THEN $4 ELSE cancel_reason END,
          final_price_cents = CASE WHEN $6 THEN $7 ELSE final_price_cents END,
+         deposit_refund_status = CASE WHEN $8 THEN 'requested' ELSE deposit_refund_status END,
          sequence = sequence + $5,
          updated_at = now()
        WHERE id = $1`,
-      [b.id, statusChanged ? input.status : null, input.depositStatus ?? null, input.note, statusChanged ? 1 : 0, priceChanged, finalCents],
+      [b.id, statusChanged ? input.status : null, depositStatus, input.note, statusChanged ? 1 : 0, priceChanged, finalCents, refundRequested],
     );
     for (const e of events) {
       await c.query('INSERT INTO booking_events (booking_id, type, actor, note) VALUES ($1, $2, $3, $4)', [b.id, e.type, `admin:${adminId}`, e.note]);

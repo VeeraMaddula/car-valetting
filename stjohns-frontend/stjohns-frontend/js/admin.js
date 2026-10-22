@@ -82,6 +82,9 @@ const STATUS = { pending: 'Awaiting confirmation', confirmed: 'Confirmed', compl
 /** Short labels for the narrow week-grid cells (the full status is in the detail panel and the cell's label). */
 const CELL_TAGS = { pending: 'To confirm', confirmed: 'Confirmed', completed: 'Done', no_show: 'Missed' };
 const DEPOSIT = { not_requested: 'Not requested', requested: 'Requested', paid: 'Paid', refunded: 'Refunded', waived: 'Waived' };
+/** A Stripe refund that hasn't succeeded (the deposit only shows "Refunded" once it has). */
+const REFUND = { requested: 'refund requested', pending: 'refund in progress', requires_action: 'refund needs action in Stripe', failed: 'refund failed', canceled: 'refund cancelled' };
+const REFUND_BUSY = new Set(['requested', 'pending', 'requires_action']);
 const ACTIVE = new Set(['pending', 'confirmed']);
 const PERIOD_ORDER = { morning: 0, afternoon: 1, evening: 2 };
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -545,6 +548,7 @@ const overview = {
 const EVENT_LABELS = {
   created: 'Booked', confirmed: 'Confirmed', cancelled: 'Cancelled', completed: 'Completed', no_show: 'Marked as missed',
   deposit_requested: 'Deposit requested', deposit_paid: 'Deposit received', deposit_refunded: 'Deposit refunded', deposit_waived: 'Deposit waived',
+  deposit_refund_requested: 'Refund requested', deposit_refund_pending: 'Refund processing at Stripe', deposit_refund_failed: 'Refund failed',
   deposit_link_sent: 'Payment link sent', deposit_failed: 'Payment did not go through', claimed: 'Added to their account', note: 'Note', price_set: 'Charged amount',
 };
 const JOB_LABELS = {
@@ -779,7 +783,7 @@ const bookings = {
       p.addons && p.addons.length ? ['Extras', p.addons.map((a) => `${a.name} (+${euro(a.priceEur)})`).join(', ')] : null,
       p.discount ? ['Discount', `${p.discount.code} (−${euro(p.discount.amountEur)})`] : null,
       p.finalEur !== null && p.finalEur !== undefined ? ['Charged', euro(p.finalEur)] : null,
-      ['Deposit', `${DEPOSIT[booking.deposit.status]}${['requested', 'paid'].includes(booking.deposit.status) ? ` · ${euro(booking.deposit.amountEur)}` : ''}`],
+      ['Deposit', `${DEPOSIT[booking.deposit.status]}${['requested', 'paid'].includes(booking.deposit.status) ? ` · ${euro(booking.deposit.amountEur)}` : ''}${REFUND[booking.deposit.refundStatus] ? ` · ${REFUND[booking.deposit.refundStatus]}` : ''}`],
       booking.notes ? ['Notes', booking.notes] : null,
     ].filter(Boolean);
     const contact = el('div', { class: 'adm-contact' },
@@ -839,8 +843,9 @@ const bookings = {
       }));
     }
     if (b.status === 'no_show') list.push(btn('They came after all: mark completed', (e) => update(e.currentTarget, { status: 'completed' }, 'Marked completed.')));
-    if (dep === 'paid' && b.status !== 'pending') {
-      list.push(btn('Refund deposit', async (e) => {
+    if (dep === 'paid' && b.status !== 'pending' && !REFUND_BUSY.has(b.deposit.refundStatus)) {
+      const retry = b.deposit.refundStatus === 'failed' || b.deposit.refundStatus === 'canceled';
+      list.push(btn(retry ? 'Try the refund again' : 'Refund deposit', async (e) => {
         const button = e.currentTarget;
         if (await confirmDialog({ title: 'Refund the deposit?', text: `${euro(b.deposit.amountEur)} goes back to ${b.customerName}. Online payments are refunded through Stripe.`, confirmLabel: 'Refund', danger: true })) {
           update(button, { depositStatus: 'refunded' }, 'Refund started.');
