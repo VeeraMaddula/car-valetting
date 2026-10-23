@@ -1,47 +1,40 @@
-import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
 import type { Config } from '../config.js';
 import { PermanentProviderError } from '../lib/errors.js';
 import type { SendResult } from './resend.js';
 
-function recipient(config: Config, e164: string): string {
-  if (config.SENDMODE_NUMBER_FORMAT === 'national') {
-    const parsed = parsePhoneNumberFromString(e164);
-    if (parsed?.country === 'IE') return parsed.formatNational().replace(/\s/g, '');
-  }
-  return e164.replace(/^\+/, '');
-}
+/** Sendmode Engage REST 3.0 (https://engage.sendmode.com/apireference/#/send). */
+const SENDMODE_SEND_URL = 'https://sms-rest.sendmode.dev/3.0/send';
 
-/** Send an SMS through Sendmode's v2 REST API (https://developers.sendmode.com/restdocs/send). */
+/** Send an SMS through Sendmode's REST 3.0 API. Numbers go in E.164 (+353…); '<' and '>' are not allowed in the text. */
 export async function sendSms(config: Config, toE164: string, text: string, customerId: string): Promise<SendResult> {
   if (!config.SENDMODE_ACCESS_KEY) return { sent: false, reason: 'SENDMODE_ACCESS_KEY not set' };
-  const message = {
-    messagetext: text,
-    senderid: config.SENDMODE_SENDER_ID,
-    recipients: [recipient(config, toE164)],
-    customerid: customerId,
-  };
-  const res = await fetch('https://rest.sendmode.com/v2/send', {
+  const res = await fetch(SENDMODE_SEND_URL, {
     method: 'POST',
     headers: {
       Authorization: config.SENDMODE_ACCESS_KEY,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({ message: JSON.stringify(message) }),
+    body: JSON.stringify({
+      sender_id: config.SENDMODE_SENDER_ID,
+      message: text.replace(/[<>]/g, '').slice(0, 1224),
+      mobile_number: toE164.startsWith('+') ? toE164 : `+${toE164}`,
+      customer_id: customerId,
+    }),
     signal: AbortSignal.timeout(10_000),
   });
   const body = await res.text();
-  let parsed: { status?: string; statusCode?: number } | null = null;
+  let parsed: { is_successful?: boolean; request_id?: string; error_message?: string | null } | null = null;
   try {
     parsed = JSON.parse(body);
   } catch {
     parsed = null;
   }
-  if (res.ok && parsed?.status === 'OK') return { sent: true, id: customerId };
+  if (res.ok && parsed?.is_successful) return { sent: true, id: parsed.request_id ?? customerId };
   if (res.status === 401 || res.status === 403) {
     throw new PermanentProviderError(`Sendmode rejected the access key (${res.status}): ${body}`);
   }
   if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-    throw new PermanentProviderError(`Sendmode rejected the SMS (${res.status}): ${body}`);
+    throw new PermanentProviderError(`Sendmode rejected the SMS (${res.status}): ${parsed?.error_message ?? body}`);
   }
   throw new Error(`Sendmode error ${res.status}: ${body}`);
 }

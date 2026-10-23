@@ -56,6 +56,7 @@ const schema = z.object({
   // Must match the Sender ID registered in ComReg's Sender ID Registry (approved for Sendmode), or Irish networks
   // block the texts or mark them "Likely SCAM".
   SENDMODE_SENDER_ID: z.string().max(11).default('SJPCarValet'),
+  // Kept for old .env files; REST 3.0 always takes E.164 numbers.
   SENDMODE_NUMBER_FORMAT: z.enum(['international', 'national']).default('international'),
 
   GOOGLE_SERVICE_ACCOUNT_JSON: optionalString,

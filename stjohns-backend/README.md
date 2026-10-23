@@ -134,12 +134,13 @@ Using one domain for both keeps the login cookie first-party, which Safari on iP
 
 ### 5. Sendmode (SMS)
 
-1. At https://www.sendmode.com create an account and an **API access key** → `SENDMODE_ACCESS_KEY`.
+1. At https://engage.sendmode.com create an account and an **API Key** (right-hand menu › API Keys) → `SENDMODE_ACCESS_KEY`.
+   The app uses Sendmode's REST 3.0 (`sms-rest.sendmode.dev`); the older v2 endpoint accepts messages but does not deliver them on Engage accounts.
 2. Set `SENDMODE_SENDER_ID=SJPCarValet` (the default). In Ireland the sender name must be registered in ComReg's
    Sender ID Registry with Sendmode authorised as the SMS provider (OPA), or networks block the texts or label them
    "Likely SCAM". `SJPCarValet` is registered (SIDR-18795, approved 21/10/2026, OPA Sendmode). To use a different name,
    register it there first, then match it here exactly, including capitals.
-3. Send one test booking to your own mobile. If Sendmode rejects the number format, set `SENDMODE_NUMBER_FORMAT=national`.
+3. Send one test booking to your own mobile, or use the dashboard's Settings › Connected services › Send test text.
 
 SMS go only to mobile numbers; landlines are skipped automatically.
 
