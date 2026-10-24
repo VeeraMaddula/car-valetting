@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /account.html
+Disallow: /my-bookings.html
+Disallow: /reset-password.html
+Disallow: /track.html
+
+Sitemap: https://www.stjohnsparkcarvalet.ie/sitemap.xml
